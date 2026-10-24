@@ -1,0 +1,59 @@
+# Dependencies
+**/node_modules/
+**/vendor/
+
+# Build outputs
+**/dist/
+**/build/
+**/.vite/
+**/coverage/
+
+# Environment variables and secrets
+.env
+.env.*
+!.env.example
+!.env.sample
+!.env.template
+
+# Local configuration
+.bashrc
+.bash_profile
+.zshrc
+.profile
+.prompt
+*.prompt.local
+.claude/settings.local.json
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+
+# Logs and temporary files
+*.log
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+*.tmp
+*.swp
+.DS_Store
+Thumbs.db
+
+# Browser automation artifacts
+**/chrome-profile/
+**/playwright-report/
+**/test-results/
+
+# Generated media and large recordings
+**/brag-output/work/
+**/soundtrack.wav
+
+# Local IDE settings
+.vscode/
+.idea/
+
+# Claude Code instructions and plans are intentionally tracked

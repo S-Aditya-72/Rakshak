@@ -1,0 +1,1 @@
+Groomers rely on nobody connecting the messages. RAKSHAK connects them: an on-device AI layer that tracks how grooming and sextortion cues build over days, nudges the child, and alerts a parent before the threat lands. Built by Team Git Happens for ChronoForge 2026.
