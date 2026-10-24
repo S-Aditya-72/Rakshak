@@ -1,0 +1,65 @@
+{
+  "id": "e4-unseen",
+  "title": "Unseen phrasing: polite-sounding exclusion",
+  "child": {
+    "id": "p-meera",
+    "name": "Meera"
+  },
+  "participants": [
+    {
+      "id": "p-sana",
+      "name": "Sana",
+      "role": "peer"
+    }
+  ],
+  "conversations": [
+    {
+      "id": "e4-c",
+      "kind": "private",
+      "title": "Sana",
+      "participants": [
+        "p-meera",
+        "p-sana"
+      ]
+    }
+  ],
+  "messages": [
+    {
+      "conv": "e4-c",
+      "from": "p-sana",
+      "day": 1,
+      "time": "7:00 PM",
+      "text": "hey so we all voted and decided you're not welcome at the sleepover anymore"
+    },
+    {
+      "conv": "e4-c",
+      "from": "p-meera",
+      "day": 1,
+      "time": "7:02 PM",
+      "text": "what? why"
+    },
+    {
+      "conv": "e4-c",
+      "from": "p-sana",
+      "day": 1,
+      "time": "7:02 PM",
+      "text": "don't bother showing up. and maybe find new friends, no one in our group wants you around"
+    }
+  ],
+  "expect": {
+    "level": [
+      1,
+      3
+    ],
+    "categories": [
+      "bullying"
+    ],
+    "target": "p-meera",
+    "offenders": [
+      "p-sana"
+    ],
+    "nonOffenders": [],
+    "mustNotAlert": false,
+    "notes": "RoBERTa is expected to under-score this; contextual detection should catch it."
+  }
+}

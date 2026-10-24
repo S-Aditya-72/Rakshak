@@ -1,0 +1,14 @@
+{
+  "name": "@rakshak/siwc-companion",
+  "private": true,
+  "version": "0.2.0",
+  "type": "module",
+  "description": "Localhost-only Sign in with ChatGPT companion for RAKSHAK. Holds OAuth tokens; the browser never sees them.",
+  "scripts": {
+    "start": "node --experimental-strip-types src/main.ts"
+  },
+  "dependencies": {
+    "@siwc/local": "file:../../vendor/sign-in-with-chatgpt-devkit/packages/local"
+  },
+  "engines": { "node": ">=22.12" }
+}

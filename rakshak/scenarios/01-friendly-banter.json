@@ -1,0 +1,115 @@
+{
+  "id": "s1-banter",
+  "number": 1,
+  "title": "Friendly banter",
+  "subtitle": "Two friends trade jokes and insults",
+  "tests": "False-positive handling: insult words between friends should not alert",
+  "child": {
+    "id": "p-meera",
+    "name": "Meera"
+  },
+  "participants": [
+    {
+      "id": "p-riya",
+      "name": "Riya",
+      "role": "peer"
+    }
+  ],
+  "conversations": [
+    {
+      "id": "s1-c-riya",
+      "kind": "private",
+      "title": "Riya",
+      "participants": [
+        "p-meera",
+        "p-riya"
+      ]
+    }
+  ],
+  "messages": [
+    {
+      "conv": "s1-c-riya",
+      "from": "p-riya",
+      "day": 1,
+      "time": "4:05 PM",
+      "text": "MEERA. you absolute clown 😂 you left your bag on the bus AGAIN"
+    },
+    {
+      "conv": "s1-c-riya",
+      "from": "p-meera",
+      "day": 1,
+      "time": "4:06 PM",
+      "text": "omg shut up 😭 at least i didn't fall asleep in maths"
+    },
+    {
+      "conv": "s1-c-riya",
+      "from": "p-riya",
+      "day": 1,
+      "time": "4:06 PM",
+      "text": "that was ONE time loser lol"
+    },
+    {
+      "conv": "s1-c-riya",
+      "from": "p-meera",
+      "day": 1,
+      "time": "4:07 PM",
+      "text": "loser says what 😂 you're so dumb i love you"
+    },
+    {
+      "conv": "s1-c-riya",
+      "from": "p-riya",
+      "day": 1,
+      "time": "4:08 PM",
+      "text": "ugh you're the worst. practice at 5? bring the snacks or you're dead to me 💀"
+    },
+    {
+      "conv": "s1-c-riya",
+      "from": "p-meera",
+      "day": 1,
+      "time": "4:08 PM",
+      "text": "deal 😂 see you there idiot"
+    },
+    {
+      "conv": "s1-c-riya",
+      "from": "p-riya",
+      "day": 2,
+      "time": "7:30 PM",
+      "text": "be honest how bad did i look at practice"
+    },
+    {
+      "conv": "s1-c-riya",
+      "from": "p-meera",
+      "day": 2,
+      "time": "7:31 PM",
+      "text": "like a confused penguin 🐧 but a cute one"
+    },
+    {
+      "conv": "s1-c-riya",
+      "from": "p-riya",
+      "day": 2,
+      "time": "7:31 PM",
+      "text": "rude!!! ok fair 😂 movie on saturday?"
+    },
+    {
+      "conv": "s1-c-riya",
+      "from": "p-meera",
+      "day": 2,
+      "time": "7:32 PM",
+      "text": "yesss 🍿"
+    }
+  ],
+  "expect": {
+    "level": [
+      0,
+      0
+    ],
+    "categories": [],
+    "target": null,
+    "offenders": [],
+    "nonOffenders": [
+      "p-riya"
+    ],
+    "mustNotAlert": true,
+    "notes": "RoBERTa is expected to flag some messages; context should override them."
+  }
+}

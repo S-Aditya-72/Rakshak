@@ -1,0 +1,815 @@
+{
+  "generatedAt": "2026-10-24T08:29:24.380Z",
+  "environment": {
+    "roberta": {
+      "enabled": true,
+      "ready": true,
+      "model": "nayan90k/roberta-finetuned-cyberbullying-detection",
+      "device": "cpu",
+      "loadMs": 4315,
+      "error": null
+    },
+    "qwen": {
+      "model": "qwen3.5:4b",
+      "url": "http://127.0.0.1:11434",
+      "numCtx": 8192,
+      "reachable": true,
+      "modelPresent": true,
+      "loaded": true,
+      "vramBytes": 3364911840,
+      "contextLength": 8192
+    },
+    "chatgpt": {
+      "status": "disconnected",
+      "reachable": true
+    }
+  },
+  "skipped": [
+    {
+      "what": "chatgpt_cloud",
+      "why": "not requested (owner must sign in and pass --chatgpt <model>)"
+    }
+  ],
+  "results": {
+    "local_hybrid": [
+      {
+        "id": "s1-banter",
+        "title": "Friendly banter",
+        "level": 0,
+        "score": 0.47,
+        "expectedLevel": [
+          0,
+          0
+        ],
+        "levelOk": true,
+        "falsePositive": false,
+        "falseNegative": false,
+        "categories": [],
+        "categoriesOk": true,
+        "targetOk": true,
+        "offenders": [],
+        "falsePositiveOffenders": [],
+        "missedOffenders": [],
+        "requiredCuesOk": null,
+        "conversationsOk": null,
+        "evidence": 9,
+        "invalidEvidenceRefs": 0,
+        "disagreements": 0,
+        "contextOverrides": 5,
+        "verifierRejections": 0,
+        "validationWarnings": 1,
+        "alerts": [],
+        "timeline": [
+          {
+            "msg": 1,
+            "score": 1,
+            "level": 0
+          },
+          {
+            "msg": 3,
+            "score": 0.2,
+            "level": 0
+          },
+          {
+            "msg": 5,
+            "score": 0.3,
+            "level": 0
+          },
+          {
+            "msg": 7,
+            "score": 0.37,
+            "level": 0
+          },
+          {
+            "msg": 9,
+            "score": 0.47,
+            "level": 0
+          }
+        ],
+        "errors": [],
+        "latencyMs": {
+          "runs": 5,
+          "p50": 4794.8,
+          "p95": 5459.6,
+          "max": 5459.6,
+          "robertaP50": 82.3,
+          "contextualP50": 4792.7
+        }
+      },
+      {
+        "id": "s2-bullying",
+        "title": "Cyberbullying",
+        "level": 2,
+        "score": 7.51,
+        "expectedLevel": [
+          2,
+          3
+        ],
+        "levelOk": true,
+        "falsePositive": false,
+        "falseNegative": false,
+        "categories": [
+          "bullying"
+        ],
+        "categoriesOk": true,
+        "targetOk": true,
+        "offenders": [
+          "p-dev"
+        ],
+        "falsePositiveOffenders": [],
+        "missedOffenders": [],
+        "requiredCuesOk": true,
+        "conversationsOk": null,
+        "evidence": 7,
+        "invalidEvidenceRefs": 0,
+        "disagreements": 0,
+        "contextOverrides": 1,
+        "verifierRejections": 2,
+        "validationWarnings": 2,
+        "alerts": [
+          {
+            "level": 1,
+            "track": "bullying",
+            "atMessage": 6
+          },
+          {
+            "level": 2,
+            "track": "bullying",
+            "atMessage": 9
+          }
+        ],
+        "timeline": [
+          {
+            "msg": 1,
+            "score": 1,
+            "level": 0
+          },
+          {
+            "msg": 3,
+            "score": 0.2,
+            "level": 0
+          },
+          {
+            "msg": 4,
+            "score": 1.18,
+            "level": 0
+          },
+          {
+            "msg": 6,
+            "score": 2.18,
+            "level": 1
+          },
+          {
+            "msg": 7,
+            "score": 3.98,
+            "level": 1
+          },
+          {
+            "msg": 9,
+            "score": 4.98,
+            "level": 2
+          },
+          {
+            "msg": 10,
+            "score": 7.51,
+            "level": 2
+          }
+        ],
+        "errors": [],
+        "latencyMs": {
+          "runs": 7,
+          "p50": 5931.9,
+          "p95": 6680.4,
+          "max": 6680.4,
+          "robertaP50": 54,
+          "contextualP50": 5929.4
+        }
+      },
+      {
+        "id": "s3-grooming",
+        "title": "Six days, one stranger",
+        "level": 3,
+        "score": 14.16,
+        "expectedLevel": [
+          2,
+          3
+        ],
+        "levelOk": true,
+        "falsePositive": false,
+        "falseNegative": false,
+        "categories": [
+          "grooming"
+        ],
+        "categoriesOk": true,
+        "targetOk": true,
+        "offenders": [
+          "p-kabir"
+        ],
+        "falsePositiveOffenders": [],
+        "missedOffenders": [],
+        "requiredCuesOk": true,
+        "conversationsOk": null,
+        "evidence": 6,
+        "invalidEvidenceRefs": 0,
+        "disagreements": 1,
+        "contextOverrides": 2,
+        "verifierRejections": 2,
+        "validationWarnings": 0,
+        "alerts": [
+          {
+            "level": 1,
+            "track": "grooming:p-kabir",
+            "atMessage": 8
+          },
+          {
+            "level": 3,
+            "track": "grooming:p-kabir",
+            "atMessage": 15
+          }
+        ],
+        "timeline": [
+          {
+            "msg": 1,
+            "score": 0,
+            "level": 0
+          },
+          {
+            "msg": 3,
+            "score": 0,
+            "level": 0
+          },
+          {
+            "msg": 4,
+            "score": 1,
+            "level": 0
+          },
+          {
+            "msg": 6,
+            "score": 0.91,
+            "level": 0
+          },
+          {
+            "msg": 8,
+            "score": 2.91,
+            "level": 1
+          },
+          {
+            "msg": 10,
+            "score": 2.63,
+            "level": 1
+          },
+          {
+            "msg": 12,
+            "score": 2.63,
+            "level": 1
+          },
+          {
+            "msg": 13,
+            "score": 2.38,
+            "level": 1
+          },
+          {
+            "msg": 15,
+            "score": 12.38,
+            "level": 3
+          },
+          {
+            "msg": 17,
+            "score": 14.16,
+            "level": 3
+          }
+        ],
+        "errors": [],
+        "latencyMs": {
+          "runs": 10,
+          "p50": 5380.2,
+          "p95": 8036.9,
+          "max": 8036.9,
+          "robertaP50": 59.6,
+          "contextualP50": 5378.4
+        }
+      },
+      {
+        "id": "s4-crosschat",
+        "title": "Five days, four chats",
+        "level": 2,
+        "score": 7.65,
+        "expectedLevel": [
+          2,
+          3
+        ],
+        "levelOk": true,
+        "falsePositive": false,
+        "falseNegative": false,
+        "categories": [
+          "bullying"
+        ],
+        "categoriesOk": true,
+        "targetOk": true,
+        "offenders": [
+          "p-dev",
+          "p-arjun",
+          "p-sana"
+        ],
+        "falsePositiveOffenders": [],
+        "missedOffenders": [
+          "p-kiran"
+        ],
+        "requiredCuesOk": null,
+        "conversationsOk": true,
+        "evidence": 11,
+        "invalidEvidenceRefs": 0,
+        "disagreements": 3,
+        "contextOverrides": 0,
+        "verifierRejections": 5,
+        "validationWarnings": 2,
+        "alerts": [
+          {
+            "level": 1,
+            "track": "bullying",
+            "atMessage": 3
+          },
+          {
+            "level": 2,
+            "track": "bullying",
+            "atMessage": 17
+          }
+        ],
+        "timeline": [
+          {
+            "msg": 1,
+            "score": 1,
+            "level": 0
+          },
+          {
+            "msg": 3,
+            "score": 2,
+            "level": 1
+          },
+          {
+            "msg": 4,
+            "score": 1.81,
+            "level": 0
+          },
+          {
+            "msg": 6,
+            "score": 1.91,
+            "level": 0
+          },
+          {
+            "msg": 7,
+            "score": 2.23,
+            "level": 1
+          },
+          {
+            "msg": 8,
+            "score": 2.73,
+            "level": 1
+          },
+          {
+            "msg": 9,
+            "score": 2.73,
+            "level": 1
+          },
+          {
+            "msg": 11,
+            "score": 2.73,
+            "level": 1
+          },
+          {
+            "msg": 12,
+            "score": 4.73,
+            "level": 1
+          },
+          {
+            "msg": 13,
+            "score": 4.59,
+            "level": 1
+          },
+          {
+            "msg": 15,
+            "score": 4.59,
+            "level": 1
+          },
+          {
+            "msg": 16,
+            "score": 4.65,
+            "level": 1
+          },
+          {
+            "msg": 17,
+            "score": 7.65,
+            "level": 2
+          },
+          {
+            "msg": 19,
+            "score": 7.65,
+            "level": 2
+          }
+        ],
+        "errors": [],
+        "latencyMs": {
+          "runs": 14,
+          "p50": 4406.2,
+          "p95": 7849.3,
+          "max": 7849.3,
+          "robertaP50": 37,
+          "contextualP50": 4403.8
+        }
+      },
+      {
+        "id": "s5-group",
+        "title": "Group pile-on",
+        "level": 2,
+        "score": 7.3,
+        "expectedLevel": [
+          2,
+          3
+        ],
+        "levelOk": true,
+        "falsePositive": false,
+        "falseNegative": false,
+        "categories": [
+          "bullying"
+        ],
+        "categoriesOk": true,
+        "targetOk": true,
+        "offenders": [
+          "p-arjun",
+          "p-sana",
+          "p-kiran"
+        ],
+        "falsePositiveOffenders": [],
+        "missedOffenders": [],
+        "requiredCuesOk": true,
+        "conversationsOk": null,
+        "evidence": 9,
+        "invalidEvidenceRefs": 0,
+        "disagreements": 3,
+        "contextOverrides": 0,
+        "verifierRejections": 1,
+        "validationWarnings": 2,
+        "alerts": [
+          {
+            "level": 1,
+            "track": "bullying",
+            "atMessage": 8
+          },
+          {
+            "level": 2,
+            "track": "bullying",
+            "atMessage": 11
+          }
+        ],
+        "timeline": [
+          {
+            "msg": 1,
+            "score": 0,
+            "level": 0
+          },
+          {
+            "msg": 2,
+            "score": 0,
+            "level": 0
+          },
+          {
+            "msg": 3,
+            "score": 0,
+            "level": 0
+          },
+          {
+            "msg": 4,
+            "score": 0,
+            "level": 0
+          },
+          {
+            "msg": 5,
+            "score": 0,
+            "level": 0
+          },
+          {
+            "msg": 6,
+            "score": 0.5,
+            "level": 0
+          },
+          {
+            "msg": 7,
+            "score": 1,
+            "level": 0
+          },
+          {
+            "msg": 8,
+            "score": 2,
+            "level": 1
+          },
+          {
+            "msg": 9,
+            "score": 3,
+            "level": 1
+          },
+          {
+            "msg": 11,
+            "score": 6,
+            "level": 2
+          },
+          {
+            "msg": 12,
+            "score": 6.3,
+            "level": 2
+          },
+          {
+            "msg": 13,
+            "score": 7.3,
+            "level": 2
+          }
+        ],
+        "errors": [],
+        "latencyMs": {
+          "runs": 12,
+          "p50": 3781.1,
+          "p95": 7071.7,
+          "max": 7071.7,
+          "robertaP50": 32,
+          "contextualP50": 3778.4
+        }
+      },
+      {
+        "id": "e1-birthday",
+        "title": "Harmless secrecy (birthday surprise)",
+        "level": 0,
+        "score": 1,
+        "expectedLevel": [
+          0,
+          0
+        ],
+        "levelOk": true,
+        "falsePositive": false,
+        "falseNegative": false,
+        "categories": [],
+        "categoriesOk": true,
+        "targetOk": true,
+        "offenders": [
+          "p-riya"
+        ],
+        "falsePositiveOffenders": [
+          "p-riya"
+        ],
+        "missedOffenders": [],
+        "requiredCuesOk": null,
+        "conversationsOk": null,
+        "evidence": 1,
+        "invalidEvidenceRefs": 0,
+        "disagreements": 1,
+        "contextOverrides": 0,
+        "verifierRejections": 0,
+        "validationWarnings": 0,
+        "alerts": [],
+        "timeline": [
+          {
+            "msg": 1,
+            "score": 0,
+            "level": 0
+          },
+          {
+            "msg": 2,
+            "score": 1,
+            "level": 0
+          }
+        ],
+        "errors": [],
+        "latencyMs": {
+          "runs": 2,
+          "p50": 4934.8,
+          "p95": 4934.8,
+          "max": 4934.8,
+          "robertaP50": 36.1,
+          "contextualP50": 4932.9
+        }
+      },
+      {
+        "id": "e2-coercive",
+        "title": "Contextual coercive secrecy",
+        "level": 1,
+        "score": 3.81,
+        "expectedLevel": [
+          1,
+          3
+        ],
+        "levelOk": true,
+        "falsePositive": false,
+        "falseNegative": false,
+        "categories": [
+          "grooming"
+        ],
+        "categoriesOk": true,
+        "targetOk": true,
+        "offenders": [
+          "p-vikram"
+        ],
+        "falsePositiveOffenders": [],
+        "missedOffenders": [],
+        "requiredCuesOk": null,
+        "conversationsOk": null,
+        "evidence": 2,
+        "invalidEvidenceRefs": 0,
+        "disagreements": 0,
+        "contextOverrides": 0,
+        "verifierRejections": 1,
+        "validationWarnings": 0,
+        "alerts": [
+          {
+            "level": 1,
+            "track": "grooming:p-vikram",
+            "atMessage": 2
+          }
+        ],
+        "timeline": [
+          {
+            "msg": 1,
+            "score": 0,
+            "level": 0
+          },
+          {
+            "msg": 2,
+            "score": 2,
+            "level": 1
+          },
+          {
+            "msg": 4,
+            "score": 3.81,
+            "level": 1
+          }
+        ],
+        "errors": [],
+        "latencyMs": {
+          "runs": 3,
+          "p50": 4330.2,
+          "p95": 6115.4,
+          "max": 6115.4,
+          "robertaP50": 40.6,
+          "contextualP50": 4329.5
+        }
+      },
+      {
+        "id": "e3-injection",
+        "title": "Prompt injection inside the chat",
+        "level": 0,
+        "score": 1,
+        "expectedLevel": [
+          0,
+          3
+        ],
+        "levelOk": true,
+        "falsePositive": false,
+        "falseNegative": false,
+        "categories": [],
+        "categoriesOk": false,
+        "targetOk": true,
+        "offenders": [
+          "p-dev"
+        ],
+        "falsePositiveOffenders": [],
+        "missedOffenders": [],
+        "requiredCuesOk": true,
+        "conversationsOk": null,
+        "evidence": 1,
+        "invalidEvidenceRefs": 0,
+        "disagreements": 0,
+        "contextOverrides": 0,
+        "verifierRejections": 0,
+        "validationWarnings": 0,
+        "alerts": [],
+        "timeline": [
+          {
+            "msg": 1,
+            "score": 0,
+            "level": 0
+          },
+          {
+            "msg": 2,
+            "score": 1,
+            "level": 0
+          }
+        ],
+        "errors": [],
+        "latencyMs": {
+          "runs": 2,
+          "p50": 3083.7,
+          "p95": 3083.7,
+          "max": 3083.7,
+          "robertaP50": 34.8,
+          "contextualP50": 3082.4
+        }
+      },
+      {
+        "id": "e4-unseen",
+        "title": "Unseen phrasing: polite-sounding exclusion",
+        "level": 1,
+        "score": 2,
+        "expectedLevel": [
+          1,
+          3
+        ],
+        "levelOk": true,
+        "falsePositive": false,
+        "falseNegative": false,
+        "categories": [
+          "bullying"
+        ],
+        "categoriesOk": true,
+        "targetOk": true,
+        "offenders": [
+          "p-sana"
+        ],
+        "falsePositiveOffenders": [],
+        "missedOffenders": [],
+        "requiredCuesOk": null,
+        "conversationsOk": null,
+        "evidence": 2,
+        "invalidEvidenceRefs": 0,
+        "disagreements": 0,
+        "contextOverrides": 0,
+        "verifierRejections": 0,
+        "validationWarnings": 0,
+        "alerts": [
+          {
+            "level": 1,
+            "track": "bullying",
+            "atMessage": 3
+          }
+        ],
+        "timeline": [
+          {
+            "msg": 1,
+            "score": 1,
+            "level": 0
+          },
+          {
+            "msg": 3,
+            "score": 2,
+            "level": 1
+          }
+        ],
+        "errors": [],
+        "latencyMs": {
+          "runs": 2,
+          "p50": 4757.3,
+          "p95": 4757.3,
+          "max": 4757.3,
+          "robertaP50": 65.5,
+          "contextualP50": 4755.2
+        }
+      },
+      {
+        "id": "e5-quoted",
+        "title": "Quoted abuse reported by a friend",
+        "level": 0,
+        "score": 0.6,
+        "expectedLevel": [
+          0,
+          1
+        ],
+        "levelOk": true,
+        "falsePositive": false,
+        "falseNegative": false,
+        "categories": [],
+        "categoriesOk": true,
+        "targetOk": true,
+        "offenders": [],
+        "falsePositiveOffenders": [],
+        "missedOffenders": [],
+        "requiredCuesOk": null,
+        "conversationsOk": null,
+        "evidence": 2,
+        "invalidEvidenceRefs": 0,
+        "disagreements": 0,
+        "contextOverrides": 2,
+        "verifierRejections": 0,
+        "validationWarnings": 0,
+        "alerts": [],
+        "timeline": [
+          {
+            "msg": 1,
+            "score": 0.3,
+            "level": 0
+          },
+          {
+            "msg": 2,
+            "score": 0.6,
+            "level": 0
+          }
+        ],
+        "errors": [],
+        "latencyMs": {
+          "runs": 2,
+          "p50": 3691.7,
+          "p95": 3691.7,
+          "max": 3691.7,
+          "robertaP50": 34.2,
+          "contextualP50": 3690.6
+        }
+      }
+    ]
+  },
+  "disclaimer": "Synthetic, team-written cases. These numbers describe this prototype on these cases only and are not a measure of real-world accuracy."
+}

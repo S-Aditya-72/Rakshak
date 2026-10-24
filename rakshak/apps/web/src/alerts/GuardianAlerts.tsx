@@ -127,7 +127,7 @@ export function AlertSheet({ alert }: { alert: AlertItem }) {
             <NeonBadge level={alert.level} size="sm" />
             <div className="sheet-title">{alert.guardianTitle}</div>
             <div className="sheet-sub">
-              Contact {alert.contact} · first seen Day 1 · {CHILD.name}'s phone
+              {alert.contact} · {CHILD.name}'s phone{alert.preview ? ' · preview' : ''}
             </div>
           </div>
           <button className="sheet-x" onClick={() => dispatch({ type: 'closeSheet' })} aria-label="Close">
@@ -139,16 +139,18 @@ export function AlertSheet({ alert }: { alert: AlertItem }) {
           <div className="sheet-card sheet-score">
             <ScoreRing score={alert.score} size={104} />
             <div className="sheet-score-text">
-              <div className="sheet-k">Pattern stage</div>
-              <div className="sheet-v">{alert.stage.replace('_', ' / ')}</div>
+              <div className="sheet-k">{alert.category === 'bullying' ? 'Case type' : 'Pattern stage'}</div>
+              <div className="sheet-v">{alert.category === 'bullying' ? 'bullying' : alert.stage.replace('_', ' / ')}</div>
               <div className="sheet-k">Child dismissed nudges</div>
               <div className="sheet-v">{dismissals}×</div>
             </div>
           </div>
 
-          <div className="sheet-card">
-            <StageStepper stage={alert.stage} compact />
-          </div>
+          {alert.category !== 'bullying' && (
+            <div className="sheet-card">
+              <StageStepper stage={alert.stage} compact />
+            </div>
+          )}
 
           <div className="sheet-card">
             <div className="sheet-card-title">Cue timeline</div>
@@ -180,6 +182,7 @@ export function AlertSheet({ alert }: { alert: AlertItem }) {
           <div className="privacy-line">
             <Lock size={12} strokeWidth={2.4} /> Message content stays on {CHILD.name}'s device. You see cue types and dates only.
           </div>
+          <div className="privacy-line">AI-detected warning signs, not a confirmed offence. Please review with {CHILD.name} before acting.</div>
 
           <div className="sheet-actions">
             {critical ? (
@@ -259,9 +262,25 @@ export function CriticalTakeover({ alert }: { alert: AlertItem }) {
               <div className="critical-title">{alert.guardianTitle}</div>
               <div className="critical-body">{alert.guardianBody}</div>
               <ul className="critical-list">
-                <li>Don't pay. Payment rarely stops the threats.</li>
-                <li>Don't delete anything. Chats are evidence.</li>
-                <li>Reassure {CHILD.name}: this is not their fault.</li>
+                {alert.category === 'bullying' ? (
+                  <>
+                    <li>A threat was made. Keep {CHILD.name} with a trusted adult.</li>
+                    <li>Don't delete anything. Save the messages as evidence.</li>
+                    <li>Contact the school; involve police only if safety is at risk.</li>
+                  </>
+                ) : alert.cues.some((c) => c.cue === 'threat_payment') ? (
+                  <>
+                    <li>Don't pay. Payment rarely stops the threats.</li>
+                    <li>Don't delete anything. Chats are evidence.</li>
+                    <li>Reassure {CHILD.name}: this is not their fault.</li>
+                  </>
+                ) : (
+                  <>
+                    <li>Don't delete anything. Chats are evidence.</li>
+                    <li>Talk calmly with {CHILD.name}: this is not their fault.</li>
+                    <li>Don't confront the contact yourself; use the guided report.</li>
+                  </>
+                )}
               </ul>
             </div>
 

@@ -1,0 +1,22 @@
+{
+  "name": "rakshak",
+  "private": true,
+  "version": "0.2.0",
+  "type": "module",
+  "workspaces": [
+    "packages/shared",
+    "packages/engine",
+    "apps/web"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w @rakshak/web",
+    "build": "npm run build -w @rakshak/web",
+    "test": "vitest run --config apps/web/vitest.config.ts",
+    "test:server": "node scripts/run-server-tests.mjs",
+    "eval": "vite-node scripts/eval.ts",
+    "companion": "npm --prefix apps/siwc-companion start",
+    "server": "node scripts/start-server.mjs",
+    "e2e": "node scripts/e2e-browser.mjs",
+    "setup:siwc": "node scripts/setup-siwc.mjs"
+  }
+}

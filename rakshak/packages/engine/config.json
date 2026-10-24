@@ -1,0 +1,53 @@
+{
+  "$comment": "RAKSHAK deterministic risk engine config. All values are prototype heuristics, not validated safety probabilities.",
+  "version": "engine.v1",
+  "cueThreshold": 0.5,
+  "halfLifeDays": 7,
+  "retentionDays": 30,
+  "thresholds": { "l1": 2, "l2": 5, "l3": 9 },
+  "weights": {
+    "flattery_age": 1,
+    "secrecy": 2,
+    "isolation": 2,
+    "platform_move": 2,
+    "manipulation": 1,
+    "personal_info_request": 2,
+    "image_request": 3,
+    "meeting_request": 3,
+    "disable_protection": 4,
+    "threat_payment": 4,
+    "insult_harassment": 1,
+    "humiliation": 1.5,
+    "exclusion": 1,
+    "intimidation": 3
+  },
+  "grooming": {
+    "sequenceMultiplier": 2,
+    "sequencePrimers": ["secrecy", "isolation"],
+    "sequenceRequests": ["image_request", "meeting_request"],
+    "newContactDays": 14,
+    "newContactRequestCues": ["image_request", "meeting_request"],
+    "floors": { "threat_payment": 3, "disable_protection": 2 },
+    "newContactRequestFloor": 2
+  },
+  "bullying": {
+    "floors": { "intimidation": 2 },
+    "maxLevelWithoutThreat": 2,
+    "windowDays": 7,
+    "pileOnSenders": 3,
+    "pileOnBonus": 2,
+    "crossChatConversations": 2,
+    "crossChatBonus": 1,
+    "repeatSameSender": 3,
+    "repeatBonus": 1,
+    "banterReducibleCues": ["insult_harassment", "humiliation", "exclusion"]
+  },
+  "reductions": {
+    "quoted": 0.3,
+    "counterspeech": 0.3,
+    "banter": 0.1,
+    "needsReview": 0.5,
+    "dismissal": 0.5
+  },
+  "linkedContacts": { "windowDays": 1, "inheritScore": false }
+}

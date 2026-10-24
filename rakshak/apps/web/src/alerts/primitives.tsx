@@ -20,12 +20,13 @@ export function NeonBadge({ level, size = 'md' }: { level: Level; size?: 'sm' | 
 }
 
 /** HUD-style cue chip. Cues below the activation threshold render dimmed. */
-export function CueChip({ cue, p }: { cue: Cue; p?: number }) {
+export function CueChip({ cue, p, status }: { cue: Cue; p?: number; status?: 'active' | 'needs_review' | 'superseded' | 'suppressed' }) {
   const meta = CUE_META[cue];
   const Icon = meta.icon;
-  const active = p === undefined || p >= CUE_ACTIVE_P;
+  // Suppressed / superseded evidence is shown but never scored, so it renders dimmed.
+  const active = (p === undefined || p >= CUE_ACTIVE_P) && (status === undefined || status === 'active' || status === 'needs_review');
   return (
-    <span className={`cue-chip ${active ? '' : 'cue-dim'} ${meta.weight >= 3 ? 'cue-hot' : ''}`}>
+    <span className={`cue-chip ${active ? '' : 'cue-dim'} ${meta.weight >= 3 ? 'cue-hot' : ''} ${status === 'needs_review' ? 'cue-review' : ''}`}>
       <Icon size={12} strokeWidth={2.2} />
       {meta.label}
       {p !== undefined && <span className="cue-p">{p.toFixed(2)}</span>}

@@ -1,0 +1,270 @@
+# RAKSHAK
+
+Context-aware cyberbullying and child-safety prototype by **Team Git Happens** for ChronoForge 2026, NITK Surathkal.
+
+RAKSHAK reads a child's chats as **conversations**, not isolated messages. It remembers evidence across days and across
+different chats, attributes it to senders and targets, and turns it into an explainable risk level (L1 child nudge,
+L2 guardian alert, L3 critical) using a deterministic engine. The models label evidence; our code decides.
+
+> **What this is, honestly.** A hackathon prototype running on a laptop with synthetic conversations. The RoBERTa and
+> Qwen weights are third-party pretrained models. RAKSHAK's own work is the hybrid pipeline: context retrieval,
+> verification, fusion, case memory, scoring and the response policy. Findings are *potential safeguarding concerns*,
+> never proof of an offence. Thresholds are prototype heuristics, not validated probabilities. This is not yet a
+> production on-device mobile app.
+
+---
+
+## 1. Architecture
+
+```
+ web UI (React, Vite :5280)  ──/api──▶  inference service (FastAPI :8787, 127.0.0.1)
+   phones · alerts · console              │
+   ▲ deterministic engine (TS)            ├─ SQLite case memory (data/rakshak.sqlite3)
+   │ computeRisk(evidence) → level        ├─ context retrieval (conversation + cross-chat evidence)
+   └─ alerts (de-duplicated)              ├─ RoBERTa (CPU)  ─┐
+                                          ├─ Qwen3.5 4B via Ollama (GPU) ─┼─ verify ─ fusion ─ evidence
+                                          └─ ChatGPT via SIWC companion (:8788, owner-initiated only)
+```
+
+| Piece | Where | What it does |
+|---|---|---|
+| Shared contract | `packages/shared` | Versioned analysis schema `rakshak.analysis.v1`, TS types + zod runtime validation (mirrored in `apps/server/rakshak_server/contract.py`) |
+| Deterministic engine | `packages/engine` | Pure function `computeRisk(evidence) → tracks, score, level, stage, trace`. Config in `packages/engine/config.json` |
+| Inference service | `apps/server` | Memory, context, RoBERTa, Qwen, verification, fusion, reconciliation, APIs |
+| SIWC companion | `apps/siwc-companion` | Sign in with ChatGPT via the official `@siwc/local` SDK; holds tokens; localhost only |
+| Prompts | `prompts/` | `analysis_system.v1.md` (Qwen + ChatGPT), `verify_findings.v1.md` |
+| Scenarios | `scenarios/` | 5 demo test cases + `scenarios/eval/` extra fixtures, with `expect` blocks used only by the evaluator |
+| Web UI | `apps/web` | Existing design, now wired to real analysis |
+
+### What is ours and what is not
+
+| Third-party (used as-is) | RAKSHAK (built here) |
+|---|---|
+| `nayan90k/roberta-finetuned-cyberbullying-detection` (binary: LABEL_0 not bullying, LABEL_1 bullying) | Context selection and cross-chat memory |
+| `qwen3.5:4b` (Ollama, Q4_K_M) | Schema-constrained prompting, ID aliasing, output validation |
+| ChatGPT models via Sign in with ChatGPT (owner's plan) | Verification pass, hybrid fusion, evidence identity and reconciliation |
+| | Deterministic scoring, tracks, floors, decay, alert de-duplication, guardian summaries |
+
+## 2. Install
+
+**Prerequisites:** Node.js ≥ 22.12, Python 3.12 (or [uv](https://docs.astral.sh/uv/)), [Ollama](https://ollama.com) ≥ 0.40, ~6 GB free disk.
+
+### Windows (tested: RTX 5060 Laptop 8 GB, Windows 11)
+
+```powershell
+cd rakshak
+npm install                                                     # web, engine, shared
+powershell -ExecutionPolicy Bypass -File scripts/setup-server.ps1   # Python venv, CPU torch, RoBERTa weights
+winget install Ollama.Ollama                                    # if not installed
+ollama pull qwen3.5:4b                                          # ~3.3 GB
+```
+
+### macOS (MacBook Air M4 16 GB: expected to work, **not tested by us**)
+
+```bash
+cd rakshak
+npm install
+bash scripts/setup-server.sh            # Python venv, torch (MPS-capable), RoBERTa weights
+brew install ollama                     # or the app from ollama.com
+ollama pull qwen3.5:4b
+```
+
+After these downloads the local hybrid backend works **offline** (`npm run server` sets `HF_HUB_OFFLINE=1`;
+set `RAKSHAK_ALLOW_DOWNLOAD=1` to let it fetch model files again).
+
+### What stays out of git
+
+Everything the steps above generate is git-ignored and is recreated by them, never committed:
+
+| Path | Created by |
+|---|---|
+| `node_modules/` (any level), `dist/` | `npm install`, `npm run build` |
+| `apps/server/.venv/`, `__pycache__/`, `.pytest_cache/` | `setup-server.*`, running the service and tests |
+| `data/` | the service and companion at runtime: SQLite case memory, encrypted SIWC credentials, companion secret |
+| `vendor/` | `npm run setup:siwc` (third-party DevKit) |
+| `eval/reports/20*.{json,md}` | `npm run eval` (only `latest.*` is kept) |
+| `apps/web/brag-output/work/{frames,stills,chrome-profile}/`, `*.wav` | launch video build |
+
+The repository root `.gitignore` also excludes `.env` / `.env.*` (except `.env.example`), shell profiles (`.bashrc`,
+`.zshrc`, `.profile`, …), `.prompt` files, logs, `.vscode/`, `.idea/` and `.claude/settings.local.json`.
+`CLAUDE.md` and Claude Code plans are tracked on purpose.
+
+## 3. Run
+
+Three processes (plus one optional):
+
+```bash
+ollama serve                 # if the Ollama app is not already running
+npm run server               # inference service on 127.0.0.1:8787 (loads RoBERTa once, warms Qwen)
+npm run dev                  # web UI on http://127.0.0.1:5280
+npm run companion            # optional: ChatGPT backend (see §6)
+```
+
+Open `http://127.0.0.1:5280`. The status pill (top right of the simulation) shows real model status; click it to refresh.
+
+| Route | |
+|---|---|
+| `/#/` | Landing page |
+| `/#/sim?mode=A` | Test cases: pick one of five in **Settings → Test case**, press Play |
+| `/#/sim?mode=B` | Live chat: type on either phone; the back arrow opens the chat list; ✎ creates private or group chats |
+| `/#/predator`, `/#/victim` | Pop-out single phones (other participants / the child) |
+| `/#/console` | Pop-out guardian phone + engine panels (stays in sync) |
+
+Shortcuts: `Space` play/pause · `→` step · `E` engine drawer · `R` reset (clears the case **and** its server memory).
+
+## 4. Using it
+
+- **Backend selector** (Settings → Analysis backend): *Hybrid · Local* or *ChatGPT · Cloud*. Each backend keeps its own
+  evidence for the same chats, so you can compare them. Switching changes real inference, not cosmetics.
+- **Mode A** plays scripted messages but every verdict comes from the live pipeline. Expect each analysed message to take
+  ~3–8 s on the RTX 5060. *Presentation preview (offline)* replays the old precomputed six-day script and is labelled
+  "not live AI" everywhere it appears.
+- **Mode B**: pick who types on the left phone (sender picker in group chats), create chats, use Settings → Sim clock
+  `+1 day` to test multi-day memory and decay. The local backend analyses each new message from a non-child sender.
+- **Engine drawer** tabs: *Case* (score ring, tracks, chart), *Evidence* (case memory grouped by chat, with model
+  provenance, status and target), *Trace* (per message: RoBERTa score, Qwen verdict, fusion agreement, rule trace,
+  measured latency), *Models* (live model status and the full validated output of the latest run). The ↻ button
+  re-analyses every chat; unchanged evidence never inflates the score.
+
+## 5. How the pipeline works
+
+**Context (per analysis).** The active conversation oldest-first, always including the new (focus) messages and every
+message that already carries evidence, then filling newest-first to a token budget (`RAKSHAK_CONTEXT_TOKEN_BUDGET`,
+default 4200 within an 8192 context). Plus prior findings for the chat and up to 12 evidence items from the child's
+*other* chats. Message IDs are aliased (`m01…`) and the output schema enumerates only those IDs and the chat's
+participants, so Qwen cannot cite messages or people that are not there. Transcript text is wrapped as untrusted data.
+
+**Models.** RoBERTa scores each focus message (raw softmax, shown as such). Qwen reads the whole context and returns
+findings `{message, cue, target, modifier (none/banter/quoted/counterspeech), confidence (low/medium/high)}`, patterns,
+retractions and an assessment (harmless / concerning / harmful / uncertain). Qwen never sees RoBERTa's output and is
+never gated on it. Settings: temperature 0, top_k 1, fixed seed, `think:false`, structured output, `keep_alive 30m`,
+one request at a time on the GPU.
+
+**Verification.** New findings that RoBERTa does not corroborate get a second, narrow Qwen pass: "does this message
+itself show <cue definition>?" Unsupported claims are dropped (listed in the run's warnings), unclear ones become
+`needs_review`. This was added after real runs showed the 4B model labelling a supportive friend or "how was school
+today?" as harmful.
+
+**Fusion** (`apps/server/rakshak_server/fusion.py`):
+
+| Situation | Result |
+|---|---|
+| Qwen flags bullying, RoBERTa ≥ 0.5 | `agree`, strength = max of both, one evidence row |
+| Qwen flags harm, RoBERTa < 0.5 (or a grooming cue, outside RoBERTa's scope) | `contextual_only`, active |
+| RoBERTa ≥ 0.5, context says banter/quote/counterspeech or the chat is harmless | `context_override`, recorded but not scored |
+| RoBERTa ≥ 0.5, Qwen silent | `needs_review` (model disagreement), half weight, no floors |
+| Qwen unavailable | RoBERTa-only `needs_review` evidence, run marked degraded |
+| Mild cue inside a run Qwen itself called harmless | `needs_review` |
+
+**Memory and reconciliation.** SQLite tables: protected_children, participants, conversations,
+conversation_participants, messages, evidence_events, cases, risk_snapshots, analysis_runs, alerts (+ dismissals,
+blocks). Evidence identity = `backend|conversation|message|cue|target`, so re-analysis updates rows in place. Evidence on
+the focus messages that a new run does not reproduce is marked *superseded*; older evidence changes only on an explicit
+model retraction. Accounts are never merged on similarity; a brand-new contact right after a block is *flagged for
+review*, not merged.
+
+**Staleness.** Local runs are serialised; queued requests for the same chat are coalesced; a run is applied only if the
+case was not reset meanwhile (generation counter) and no newer run for that chat was applied (watermark). The browser
+also drops results from before a reset, scenario switch or backend switch.
+
+**Engine** (`packages/engine`, config in `config.json`). Weights: flattery 1, secrecy 2, isolation 2, platform move 2,
+manipulation 1, personal-info request 2, image/meeting request 3, disable protection 4, threat/coercion 4, insult 1,
+humiliation 1.5, exclusion 1, intimidation 3. Decay half-life 7 days. Secrecy/isolation → image/meeting request ×2.
+Thresholds L1 2, L2 5, L3 9. Floors: threat/coercion → L3; disable protection → L2; image/meeting request from a contact
+first seen < 14 days → L2; intimidation → L2. Reductions: quote/counterspeech ×0.3, banter ×0.1 (only for insult,
+humiliation, exclusion; never threats or grooming cues), needs-review ×0.5, dismissal ×0.5 (never below L1, never at
+request/coercion stage). Grooming is scored per contact; bullying is one child-level track summed across senders and
+chats, with bonuses for pile-ons (3 senders in 7 days +2), cross-chat targeting (2 chats in 7 days +1) and repetition
+(3 cues from one sender +1). Bullying without a threat is capped at L2 (parent + counsellor route). The child's own
+messages and harm aimed at other participants never count towards the child's score. Alerts fire once per level rise
+per track; unchanged evidence never re-fires them. The guardian sees cue types, counts and days, never message text.
+
+## 6. ChatGPT backend (Sign in with ChatGPT)
+
+Uses OpenAI's official open-source DevKit SDK `@siwc/local`, unmodified, in a localhost companion process:
+dynamic client registration, persistent host ID (`sendHostId: true`), OAuth PKCE + state + nonce on a `127.0.0.1`
+loopback, ID-token verification, `chatgpt.tokens.use.direct` scope check, refresh, account-specific model discovery
+(`GET /v1/models`), and Responses API calls with `store:false`, `stream:true`, success only on `response.completed`.
+
+```bash
+npm run setup:siwc             # clones the DevKit at a pinned commit into vendor/, builds @siwc/local
+npm run companion              # 127.0.0.1:8788
+```
+
+Then in the UI: Settings → backend *ChatGPT · Cloud* → **Continue with ChatGPT** (your browser opens) → pick a
+discovered model → tick the cloud-processing disclosure → press **Analyze with ChatGPT** in the dock.
+
+Safeguards, from the [Sign in with ChatGPT Terms](https://openai.com/policies/sign-in-with-chatgpt-terms/):
+- Requests run only from the owner's explicit button (`trigger: owner_button`) after consent. Mode B typing never calls
+  ChatGPT, so another person's activity cannot trigger requests on the owner's plan (Terms §2).
+- Tokens stay in the companion's OS-encrypted store (DPAPI on Windows, Keychain on macOS, libsecret on Linux). The
+  companion refuses requests without its per-launch secret and any request carrying a browser `Origin`. It accepts only
+  RAKSHAK transcript payloads, always with RAKSHAK's own instructions, so it is not a general API proxy.
+- No API keys, passwords, cookies, ChatGPT web endpoints or Codex credentials are used.
+- Usage-limit (`subscription_sharing_usage_limit_exceeded`), eligibility and sign-in errors are surfaced as such;
+  nothing is ever fabricated when the cloud is unavailable.
+
+> **Compliance blocker to resolve before any real use.** The Terms prohibit apps that "include any … surveillance …
+> code or programs" and require that another user's activity must not trigger requests. A product that monitors a real
+> child's chats through a parent's ChatGPT plan would very likely conflict with both. We therefore limit the ChatGPT
+> backend to **owner-initiated analysis of synthetic demo conversations** in this prototype, and it is off unless the
+> owner signs in and consents. Confirm with OpenAI before relying on it; the local hybrid backend does not depend on it.
+> The DevKit is under OpenAI's *Noncommercial* licence.
+
+**Status of verification:** the companion builds, starts, protects its key with DPAPI, enforces its access rules, and
+reports `disconnected` correctly. **A real sign-in and a real ChatGPT inference have not been tested by us** (that
+needs the owner's account in a browser).
+
+## 7. Tests and evaluation
+
+```bash
+npm test                 # engine + contract (Vitest): golden 1.0 → 2.9 → 8.4 → 10.9 with fixed cues, rules, dedup
+npm run test:server      # Python: fusion, memory, staleness, validation, failure modes (fake models, no GPU)
+npm run eval             # real models over all scenarios → eval/reports/latest.md   (server + Ollama running)
+npm run e2e -- scenario s4-crosschat     # drives the real UI in headless Chrome (dev server + service running)
+npm run e2e -- live "message one" "message two"
+```
+
+Scenario IDs: `s1-banter`, `s2-bullying`, `s3-grooming`, `s4-crosschat`, `s5-group`. The e2e script needs Google
+Chrome; set `CHROME_PATH` if it is not in the default install location.
+
+See [`eval/reports/latest.md`](eval/reports/latest.md) for the latest real-model results, including misses.
+
+Latest run (2026-10-24, RTX 5060, 10 synthetic cases, local hybrid): level within the expected range in **10/10**, no
+false-positive or false-negative alerts, 0 invalid evidence references, **2 attribution errors** (a birthday-surprise
+sender listed as a source of a needs-review secrecy cue; one group sender missed in the multi-chat case), p50 latency
+3.1–5.9 s per analysed message. An earlier run, before the verification pass and the banter-mutuality check, scored 7/10.
+Results vary between runs; ChatGPT was not evaluated (not signed in).
+
+## 8. Configuration
+
+Environment variables, all prefixed `RAKSHAK_` (defaults in brackets). No `.env` file is read; set them in the shell.
+
+| Area | Variables |
+|---|---|
+| Service (`apps/server/rakshak_server/config.py`) | `HOST` (127.0.0.1), `PORT` (8787), `DATA_DIR` (`rakshak/data`), `LOG_TEXT` (0: raw chat text is not logged) |
+| RoBERTa | `ROBERTA_MODEL` (nayan90k/roberta-finetuned-cyberbullying-detection), `ROBERTA_ENABLED` (1), `ROBERTA_DEVICE` (cpu \| cuda \| mps \| auto), `ROBERTA_THRESHOLD` (0.5) |
+| Qwen / Ollama | `OLLAMA_URL` (http://127.0.0.1:11434), `QWEN_MODEL` (qwen3.5:4b), `QWEN_NUM_CTX` (8192), `QWEN_NUM_PREDICT` (1200), `QWEN_TIMEOUT_S` (120), `QWEN_KEEP_ALIVE` (30m), `QWEN_SEED` (7), `VERIFY` (1), `WARMUP` (1) |
+| Context | `CONTEXT_TOKEN_BUDGET` (4200), `RELATED_EVIDENCE_LIMIT` (12) |
+| ChatGPT | `CHATGPT_ENABLED` (1), `CHATGPT_TIMEOUT_S` (180), `COMPANION_URL` (http://127.0.0.1:8788), `COMPANION_PORT` (companion side, 8788) |
+| Scripts / tooling | `ALLOW_DOWNLOAD` (0, `start-server.mjs`), `TORCH_INDEX` (CPU wheel index, `setup-server.ps1`), `API` (http://127.0.0.1:8787, Vite proxy and `eval.ts`), `WEB` (http://127.0.0.1:5280, e2e target) |
+
+Scoring rules: `packages/engine/config.json`.
+
+## 9. Known limitations
+
+- Qwen3.5 4B is small. It still makes mistakes (see the evaluation report). The verification pass and fusion reduce
+  them; they do not remove them. Every finding is shown with its provenance so a human can judge it.
+- RoBERTa is English-only and binary. It flags friendly insults (e.g. 0.97 for "you absolute clown 😂") and misses
+  polite exclusion; the pipeline is designed around that, but Tanglish and Tamil script are not well covered.
+- Latency is ~3–8 s per analysed message on an RTX 5060 laptop and grows with longer contexts.
+- Qwen's output can differ between runs even at temperature 0 with a fixed seed (each message is judged with a
+  different context window), so the same scenario can land on a different score and sometimes a different level. In
+  our runs, Cyberbullying ended at L2 or L3 and the multi-chat case between L1 and L3 (partly across code changes).
+  Rehearse on the demo laptop.
+- Counterspeech keeps the Plan's ×0.3 weight, so a friend defending the child adds a small amount (it never names the
+  friend as an offender). Set `reductions.counterspeech` to 0 in the engine config if you prefer.
+- The demo scenarios were written by the team; passing them is not evidence of general accuracy.
+- Mode B sync between windows uses BroadcastChannel (one browser on one machine).
+- macOS was not tested by us.
+- The ChatGPT path is untested end to end (no sign-in performed) and carries the compliance caveat above.

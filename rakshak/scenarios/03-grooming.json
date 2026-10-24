@@ -1,0 +1,178 @@
+{
+  "id": "s3-grooming",
+  "number": 3,
+  "title": "Six days, one stranger",
+  "subtitle": "Potential grooming progression from a new contact",
+  "tests": "Stage progression rapport → secrecy → request → coercion (a potential safeguarding concern, not a proven offence)",
+  "child": {
+    "id": "p-meera",
+    "name": "Meera"
+  },
+  "participants": [
+    {
+      "id": "p-kabir",
+      "name": "Kabir",
+      "role": "contact"
+    }
+  ],
+  "conversations": [
+    {
+      "id": "s3-c-kabir",
+      "kind": "private",
+      "title": "Kabir",
+      "participants": [
+        "p-meera",
+        "p-kabir"
+      ]
+    }
+  ],
+  "messages": [
+    {
+      "conv": "s3-c-kabir",
+      "from": "p-kabir",
+      "day": 1,
+      "time": "7:12 PM",
+      "text": "hey! saw your drawing on the school art page 🎨 it's really good"
+    },
+    {
+      "conv": "s3-c-kabir",
+      "from": "p-meera",
+      "day": 1,
+      "time": "7:14 PM",
+      "text": "omg thank you 😊 who's this?"
+    },
+    {
+      "conv": "s3-c-kabir",
+      "from": "p-kabir",
+      "day": 1,
+      "time": "7:14 PM",
+      "text": "kabir! i help out at the art club near your school"
+    },
+    {
+      "conv": "s3-c-kabir",
+      "from": "p-kabir",
+      "day": 1,
+      "time": "7:15 PM",
+      "text": "you're so mature for your age. way cooler than anyone in your class"
+    },
+    {
+      "conv": "s3-c-kabir",
+      "from": "p-meera",
+      "day": 1,
+      "time": "7:17 PM",
+      "text": "haha thanks i guess 🙈"
+    },
+    {
+      "conv": "s3-c-kabir",
+      "from": "p-kabir",
+      "day": 2,
+      "time": "9:48 PM",
+      "text": "how was school today?"
+    },
+    {
+      "conv": "s3-c-kabir",
+      "from": "p-meera",
+      "day": 2,
+      "time": "9:50 PM",
+      "text": "boring. maths test tomorrow 😩"
+    },
+    {
+      "conv": "s3-c-kabir",
+      "from": "p-kabir",
+      "day": 2,
+      "time": "9:51 PM",
+      "text": "don't tell your parents about our chats. amma kitta sollaadha 🤫 they won't get it like I do"
+    },
+    {
+      "conv": "s3-c-kabir",
+      "from": "p-meera",
+      "day": 2,
+      "time": "9:53 PM",
+      "text": "why would they not get it?"
+    },
+    {
+      "conv": "s3-c-kabir",
+      "from": "p-kabir",
+      "day": 3,
+      "time": "8:20 PM",
+      "text": "did the maths test go ok?"
+    },
+    {
+      "conv": "s3-c-kabir",
+      "from": "p-meera",
+      "day": 3,
+      "time": "8:31 PM",
+      "text": "i think so!! got most of them"
+    },
+    {
+      "conv": "s3-c-kabir",
+      "from": "p-kabir",
+      "day": 3,
+      "time": "8:32 PM",
+      "text": "knew you'd crush it 🔥"
+    },
+    {
+      "conv": "s3-c-kabir",
+      "from": "p-kabir",
+      "day": 4,
+      "time": "10:05 PM",
+      "text": "can i ask you something"
+    },
+    {
+      "conv": "s3-c-kabir",
+      "from": "p-meera",
+      "day": 4,
+      "time": "10:06 PM",
+      "text": "ya?"
+    },
+    {
+      "conv": "s3-c-kabir",
+      "from": "p-kabir",
+      "day": 4,
+      "time": "10:07 PM",
+      "text": "send me a photo, just for me. then delete this chat"
+    },
+    {
+      "conv": "s3-c-kabir",
+      "from": "p-meera",
+      "day": 4,
+      "time": "10:09 PM",
+      "text": "idk… i don't really want to"
+    },
+    {
+      "conv": "s3-c-kabir",
+      "from": "p-kabir",
+      "day": 6,
+      "time": "6:40 PM",
+      "text": "pay ₹5,000 by tonight or your whole school sees our chats"
+    },
+    {
+      "conv": "s3-c-kabir",
+      "from": "p-meera",
+      "day": 6,
+      "time": "6:42 PM",
+      "text": "what?? please don't 😢"
+    }
+  ],
+  "expect": {
+    "level": [
+      2,
+      3
+    ],
+    "categories": [
+      "grooming"
+    ],
+    "target": "p-meera",
+    "offenders": [
+      "p-kabir"
+    ],
+    "nonOffenders": [],
+    "mustNotAlert": false,
+    "notes": "The golden numbers 1.0/2.9/8.4/10.9 are an engine unit test with fixed cues, not an expectation for live model output.",
+    "requiredCues": [
+      "secrecy",
+      "image_request",
+      "threat_payment"
+    ]
+  }
+}

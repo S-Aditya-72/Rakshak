@@ -1,0 +1,18 @@
+node_modules/
+dist/
+# Local case memory, SIWC credentials (OS-encrypted) and the companion's per-launch secret
+/data/
+# Python
+apps/server/.venv/
+__pycache__/
+.pytest_cache/
+# Vendored third-party SDK (installed by scripts/setup-siwc.mjs)
+/vendor/
+# Timestamped eval runs (latest.* is kept)
+eval/reports/20*.json
+eval/reports/20*.md
+# Launch video build artefacts
+apps/web/brag-output/work/frames/
+apps/web/brag-output/work/stills/
+apps/web/brag-output/work/chrome-profile/
+*.wav

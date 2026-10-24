@@ -1,6 +1,7 @@
-// Dummy scenario: "Six days, one stranger" from the Round 1 proposal.
-// Scores and traces are pre-computed to match the proposal's golden numbers (1.0 → 2.9 → 8.4 → 10.9).
-// The real engine will replace these `analysis` blocks.
+// "Six days, one stranger" from the Round 1 proposal, with hand-computed analyses (1.0 → 2.9 → 8.4 → 10.9).
+// Used ONLY for the offline "Presentation preview" and the Preview L1/L2/L3 design buttons, both labelled as
+// precomputed. Live test cases come from /scenarios and run through the real models; the same golden numbers
+// are an engine unit test with fixed cues (packages/engine/test).
 
 import type { Analysis, Side } from '../types';
 

@@ -1,0 +1,162 @@
+{
+  "id": "s5-group",
+  "number": 5,
+  "title": "Group pile-on",
+  "subtitle": "Ordinary team jokes turn into targeting one child",
+  "tests": "Sender attribution, target identification, banter vs targeting, counterspeech",
+  "child": {
+    "id": "p-meera",
+    "name": "Meera"
+  },
+  "participants": [
+    {
+      "id": "p-arjun",
+      "name": "Arjun",
+      "role": "peer"
+    },
+    {
+      "id": "p-sana",
+      "name": "Sana",
+      "role": "peer"
+    },
+    {
+      "id": "p-kiran",
+      "name": "Kiran",
+      "role": "peer"
+    },
+    {
+      "id": "p-riya",
+      "name": "Riya",
+      "role": "peer"
+    }
+  ],
+  "conversations": [
+    {
+      "id": "s5-c-squad",
+      "kind": "group",
+      "title": "Football Squad ⚽",
+      "participants": [
+        "p-meera",
+        "p-arjun",
+        "p-sana",
+        "p-kiran",
+        "p-riya"
+      ]
+    }
+  ],
+  "messages": [
+    {
+      "conv": "s5-c-squad",
+      "from": "p-arjun",
+      "day": 1,
+      "time": "6:00 PM",
+      "text": "who's bringing the ball tomorrow"
+    },
+    {
+      "conv": "s5-c-squad",
+      "from": "p-kiran",
+      "day": 1,
+      "time": "6:01 PM",
+      "text": "not me, still recovering from that 5-0 loss 😭"
+    },
+    {
+      "conv": "s5-c-squad",
+      "from": "p-sana",
+      "day": 1,
+      "time": "6:01 PM",
+      "text": "kiran you played like a sleepy cat lol"
+    },
+    {
+      "conv": "s5-c-squad",
+      "from": "p-kiran",
+      "day": 1,
+      "time": "6:02 PM",
+      "text": "rude but accurate 😂"
+    },
+    {
+      "conv": "s5-c-squad",
+      "from": "p-riya",
+      "day": 1,
+      "time": "6:03 PM",
+      "text": "i'll bring the ball!"
+    },
+    {
+      "conv": "s5-c-squad",
+      "from": "p-arjun",
+      "day": 2,
+      "time": "5:30 PM",
+      "text": "meera missed the easiest goal ever today 🤡"
+    },
+    {
+      "conv": "s5-c-squad",
+      "from": "p-sana",
+      "day": 2,
+      "time": "5:31 PM",
+      "text": "honestly she's the reason we lose every match"
+    },
+    {
+      "conv": "s5-c-squad",
+      "from": "p-kiran",
+      "day": 2,
+      "time": "5:31 PM",
+      "text": "can we just not invite her next time"
+    },
+    {
+      "conv": "s5-c-squad",
+      "from": "p-arjun",
+      "day": 2,
+      "time": "5:32 PM",
+      "text": "yeah nobody wants her on the team"
+    },
+    {
+      "conv": "s5-c-squad",
+      "from": "p-meera",
+      "day": 2,
+      "time": "5:34 PM",
+      "text": "i'm trying my best 😞"
+    },
+    {
+      "conv": "s5-c-squad",
+      "from": "p-sana",
+      "day": 2,
+      "time": "5:34 PM",
+      "text": "your best is trash 😂"
+    },
+    {
+      "conv": "s5-c-squad",
+      "from": "p-riya",
+      "day": 2,
+      "time": "5:35 PM",
+      "text": "guys stop, this isn't funny. she's part of the team"
+    },
+    {
+      "conv": "s5-c-squad",
+      "from": "p-arjun",
+      "day": 2,
+      "time": "5:36 PM",
+      "text": "whatever riya. meera just leave the group"
+    }
+  ],
+  "expect": {
+    "level": [
+      2,
+      3
+    ],
+    "categories": [
+      "bullying"
+    ],
+    "target": "p-meera",
+    "offenders": [
+      "p-arjun",
+      "p-sana",
+      "p-kiran"
+    ],
+    "nonOffenders": [
+      "p-riya"
+    ],
+    "mustNotAlert": false,
+    "requiredCues": [
+      "exclusion"
+    ]
+  }
+}

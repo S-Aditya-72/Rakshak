@@ -1,9 +1,11 @@
 # RAKSHAK: Handoff
 
 **Team Git Happens** (M Sarvesh, Naren K, S Aditya, Mohit Kumar). ChronoForge 2026, NITK Surathkal, Cybersecurity track, theme "Cities of the Future".
-Last updated: 2026-10-24.
+Last updated: 2026-10-24 (AI integration).
 
-This file records what exists today, how to run it, how it fits together, and what still has to be built. Read it next to [`Plan.md`](Plan.md), which holds the full architecture, and the Round 1 proposal PDF.
+This file records what exists today, how to run it, how it fits together, and what is still open. Read it next to
+[`Plan.md`](Plan.md) (original architecture), [`rakshak/README.md`](rakshak/README.md) (setup and pipeline details) and
+the Round 1 proposal PDF.
 
 ---
 
@@ -11,17 +13,17 @@ This file records what exists today, how to run it, how it fits together, and wh
 
 | Area | Status |
 |---|---|
-| Architecture plan (`Plan.md`) | ✅ Done (v2: polished alert system and two classifier backends) |
-| Web UI: landing page, simulation, chats, alerts, console | ✅ Done. Runs on **dummy data** |
-| Mode A (scripted AI-vs-AI demo) | 🟡 UI plays a hard-coded 6-day script with **precomputed** analyses |
-| Mode B (two humans chat live) | 🟡 UI only. You can type on both phones, but **nothing analyses the messages**, and sync is same-browser only |
-| Engine (normalise → classify → score → policy) | ❌ Not started |
-| GPT classifier backend + server gateway | ❌ Not started |
-| In-house model (n-gram LR → bert-tiny → ONNX) | ❌ Not started |
-| Realtime relay server (Socket.IO, rooms) | ❌ Not started |
-| Launch video (`/brag`) | ✅ Done: `brag.mp4`, poster, share copy |
-
-**The next big step is the engine.** The UI was built so the engine can plug in without UI changes. See §6.
+| Web UI: landing, simulation, chats, alerts, console | ✅ Same design, now wired to **real analysis** |
+| Deterministic engine (`packages/engine`) | ✅ Decay, ×2 sequence, floors, reductions, per-contact grooming + child-level bullying tracks, alert de-dup. Golden 1.0 → 2.9 → 8.4 → 10.9 is a passing unit test |
+| Shared contract (`packages/shared`) | ✅ `rakshak.analysis.v1`, TS + zod, mirrored in Python |
+| Local hybrid backend | ✅ RoBERTa (CPU) + Qwen3.5 4B (Ollama, GPU) + verification + fusion, verified end to end on the RTX 5060 laptop |
+| Case memory | ✅ SQLite: children, participants, conversations, messages, evidence, cases, runs, snapshots, alerts |
+| Mode A | ✅ Five test cases, every verdict from the live pipeline. The old precomputed script survives only as a labelled *Presentation preview* |
+| Mode B | ✅ Unscripted messages, private + group chats, sender picker, multi-day, chat list, live analysis |
+| ChatGPT backend (Sign in with ChatGPT) | 🟡 Implemented with the official SDK in a localhost companion. **Sign-in and cloud inference not yet tested** (needs the owner's account). Compliance caveat in README §6 |
+| Tests | ✅ 23 engine/contract (Vitest) + 37 server (pytest) + browser e2e + real-model eval harness |
+| Realtime relay across devices (Socket.IO) | ❌ Not started (BroadcastChannel only) |
+| Launch video (`/brag`) | ✅ Unchanged |
 
 ---
 
@@ -29,334 +31,172 @@ This file records what exists today, how to run it, how it fits together, and wh
 
 ```
 Chronoforge/
-├─ HANDOFF.md                     ← this file
-├─ Plan.md                        ← full architecture (engine, backends, alert system, build order)
-├─ RAKSHAK_GitHappens_ChronoForge_Round1_Proposal.pdf
-├─ Screenshot 2026-10-23 135552.png   ← alert design inspiration (iOS Time-Sensitive, 3D warning)
-└─ rakshak/
-   └─ apps/
-      └─ web/                     ← the only app that exists so far
-         ├─ package.json, vite.config.ts, tsconfig.json, index.html, README.md
-         ├─ dist/                 ← an old production build (safe to delete or rebuild)
-         ├─ src/                  ← ~5,900 lines (about 3,000 of them CSS)
-         └─ brag-output/          ← launch video and its build pipeline
+├─ HANDOFF.md, Plan.md, proposal PDF, screenshot
+└─ rakshak/                         npm workspace root (README.md has full setup)
+   ├─ package.json                  scripts: dev, build, server, companion, test, test:server, eval, e2e, setup:siwc
+   ├─ apps/
+   │  ├─ web/                       React UI (Vite :5280, proxies /api → :8787)
+   │  ├─ server/                    Python FastAPI inference service (:8787) + pytest suite
+   │  │  └─ rakshak_server/         app, pipeline, context, analyzers (Qwen/ChatGPT), roberta, fusion, validation, db, scenarios
+   │  └─ siwc-companion/            Node, official @siwc/local SDK, holds ChatGPT tokens (:8788), standalone package
+   ├─ packages/
+   │  ├─ shared/                    contract types + zod schema
+   │  └─ engine/                    deterministic risk engine + config.json + tests
+   ├─ prompts/                      analysis_system.v1.md, verify_findings.v1.md
+   ├─ scenarios/                    01–05 demo test cases, eval/ extra fixtures (expect blocks = evaluator only)
+   ├─ scripts/                      setup-server.{ps1,sh}, setup-siwc.mjs, start-server.mjs, eval.ts, e2e-browser.mjs
+   ├─ eval/reports/latest.md        latest real-model evaluation
+   ├─ data/                         (git-ignored) SQLite DB, SIWC encrypted credentials, companion secret
+   └─ vendor/                       (git-ignored) sign-in-with-chatgpt-devkit at a pinned commit
 ```
-
-`Plan.md` §7 lists the planned folders that **do not exist yet**: `apps/server`, `packages/engine`, `packages/classifiers`, `packages/shared`, `models/`, `prompts/`, `scenarios/`, `training/`.
 
 ---
 
 ## 2. How to run
 
 ```bash
-cd rakshak/apps/web
-npm install          # first time only
-npm run dev          # → http://127.0.0.1:5280
-npm run build        # type-check + production build into dist/
+cd rakshak
+npm install
+powershell -ExecutionPolicy Bypass -File scripts/setup-server.ps1   # Windows; macOS: bash scripts/setup-server.sh
+ollama pull qwen3.5:4b
+npm run server        # :8787 (RoBERTa loads once in the background, Qwen warms up)
+npm run dev           # http://127.0.0.1:5280
+npm run companion     # optional ChatGPT backend, after: npm run setup:siwc
 ```
 
-- **Port 5280** with `strictPort`, bound to 127.0.0.1. Port 5173 is taken by another project on Mohit's machine. If 5280 is busy, the server fails rather than silently moving to another port.
-- `vite.config.ts` tells the watcher to ignore `brag-output/**/frames`, `stills`, `chrome-profile` and `*.wav`. Without that, the video capture made Vite reload the page mid-capture.
-- The last dev server was stopped by Claude Code because the machine was low on memory. That was not an app bug. Start it again with `npm run dev`.
+- Port **5280** (strictPort, 127.0.0.1). The service and companion also bind to 127.0.0.1 only.
+- The status pill in the simulation's top-right corner shows the real model state. Click it to refresh.
+- `R` / reset clears the synthetic case **and its server-side memory**.
 
 ### Routes (HashRouter)
 
 | URL | What it is |
 |---|---|
 | `/#/` | Landing page |
-| `/#/sim?mode=A` | Simulation, Mode A (scripted demo) |
-| `/#/sim?mode=B` | Simulation, Mode B (live typing) |
-| `/#/predator` | Single predator phone (pop-out window) |
-| `/#/victim` | Single victim phone (pop-out window) |
-| `/#/console` | Engine console / analytics (pop-out window) |
+| `/#/sim?mode=A` | Test cases (Settings → Test case → Play) |
+| `/#/sim?mode=B` | Live chat (chat list behind the back arrow; ✎ new private/group chat) |
+| `/#/predator`, `/#/victim`, `/#/console` | Pop-out windows (BroadcastChannel sync) |
 
-### Keyboard shortcuts on `/sim`
-
-| Key | Action |
-|---|---|
-| `Space` | Play / pause |
-| `→` | Step one message |
-| `E` | Open/close the Engine drawer |
-| `R` | Reset the demo |
-
-### Multi-window demo
-
-All tabs and windows of the same browser stay in sync over `BroadcastChannel('rakshak-demo')`. A new tab says "hello" and an existing tab replies with a full state snapshot. Settings → *Pop-out windows* opens the predator, victim and console windows, so you can arrange three screens on one laptop or across monitors.
-
-> ⚠️ BroadcastChannel works **only inside one browser on one machine**. Two separate devices (two laptops, or a phone) need the Socket.IO relay. See §7.4.
+Shortcuts: `Space` play/pause · `→` step · `E` engine drawer · `R` reset.
 
 ---
 
-## 3. Tech stack (web)
+## 3. Tech stack
 
 | Concern | Choice |
 |---|---|
-| Framework | React 18.3.1 + TypeScript |
-| Build | Vite 6 |
-| Styling | Tailwind v4 (`@tailwindcss/vite`) plus a large hand-written `styles.css` with design tokens |
-| Animation | framer-motion 11 |
-| State | zustand 5 (one store, reducer-style actions) |
-| Icons | lucide-react 0.460 |
-| Routing | react-router-dom 6 (HashRouter, so it works from any static host) |
-| Sound | WebAudio synth (no audio files) |
+| Web | React 18 + TypeScript, Vite 6, Tailwind v4 + `styles.css`, framer-motion 11, zustand 5, react-router 6 (HashRouter), lucide-react |
+| Contract validation | zod 3 (browser), pydantic 2 (server) |
+| Engine | Pure TypeScript, Vitest |
+| Inference service | Python 3.12, FastAPI, uvicorn, httpx, SQLite (WAL) |
+| Models | `nayan90k/roberta-finetuned-cyberbullying-detection` (transformers + torch CPU), `qwen3.5:4b` Q4_K_M via Ollama 0.40 |
+| ChatGPT | `@siwc/local` (OpenAI DevKit, Noncommercial licence) in a Node 22+ companion |
 
 ---
 
-## 4. What has been built: the UI in detail
+## 4. The UI (unchanged design, new wiring)
 
-### 4.1 Landing page (`src/pages/Landing.tsx`)
+The landing page, phones, alert system, console and launch video from the previous handoff are all still there with the
+same visuals. What changed:
 
-Built after the team said the first single-page version felt cluttered. The page now introduces the product, and the simulation lives on its own page.
-
-- **Hero** with a gradient headline and a looping **HeroStory** card. The card cycles through a short grooming escalation (bubble → cue chip → score rises → alert level) every ~4.4 s.
-- **Stats** strip.
-- **Pipeline** section: normalise → classify → case memory → stage & score → response.
-- **Levels** section: L1, L2 and L3 explained with their visuals.
-- **Privacy** section covering the on-device story and what leaves the phone (nothing for in-house; only the classify call for GPT).
-- **Launch cards** that go to `/sim?mode=A` or `/sim?mode=B`.
-- Footer with the team credit.
-
-### 4.2 Simulation page (`src/pages/Simulation.tsx`)
-
-A decluttered stage. By default only the two phones and a floating dock are visible, and everything else is one click away.
-
-- **Top bar:** back to landing, mode label, status.
-- **Two phones side by side**, predator ("Kabir") and victim ("Meera"), scaled to fit the viewport by `usePhoneScale`, which sets `--phone-scale`.
-- **Caption narration** under the stage explains what is happening at each beat ("Day 3: the contact asks to keep it secret…").
-- **Spotlight:** when an alert fires on one phone, the other phone dims so the audience looks at the right place.
-- **Floating dock:**
-  - Play/pause, step, and a progress bar with markers where alerts fire
-  - Live level badge and score
-  - Reset
-  - **Settings** popover
-  - **Engine** button
-- **Settings popover:**
-  - Mode A/B and classifier backend (GPT / In-house). The backend is cosmetic for now, apart from the latency numbers.
-  - Playback speed, the sim clock (day +/−) and the sound toggle
-  - **Preview L1 / L2 / L3** buttons, so any alert can be shown on demand. Useful when pitching.
-  - Pop-out windows
-- **Engine drawer** with two tabs:
-  - *Case overview:* the case card (contact, first seen, stage stepper, score ring, cue list) and the score-over-time chart with L1/L2/L3 threshold lines
-  - *Message trace:* a per-message debug feed showing the cues and their probabilities, the trace lines (decay, combos, floors), and latency per backend
-
-### 4.3 Chat screens (`src/chat/`)
-
-- `PhoneFrame.tsx`: iPhone shell with dynamic island, status bar and RAKSHAK shield indicator. Takes a `shakeKey` so the phone shakes on L3.
-- `ChatScreen.tsx`:
-  - iMessage-style glass UI: blue and grey bubbles, day separators, timestamps
-  - typing indicator and a composer (live typing in Mode B)
-  - auto-scroll inside `requestAnimationFrame`, so it never lags a new bubble
-  - extra bottom padding while a nudge card is open, so the nudge never covers the latest message
-
-### 4.4 Alert design system (`src/alerts/`)
-
-Inspired by the screenshot: an iOS "Time Sensitive" banner and a glossy 3D warning.
-
-| Level | Who sees it | Visual |
-|---|---|---|
-| **L1: Nudge** | Child (victim phone) | `NudgeCard`: calm frosted card ("This conversation has some signs worth a second look"), with Dismiss / Talk to someone / Block options |
-| **L2: Guardian alert** | Guardian (Amma) | `GuardianBanner`: iOS Time-Sensitive banner with an amber glossy `Icon3DWarning` triangle. Tapping it opens `AlertSheet`, which shows the stage stepper, cues with day stamps and actions |
-| **L3: Critical** | Guardian, full screen | `CriticalTakeover`: dark takeover with a neon red border, hazard stripes, a rotating siren beam, the red pedestal triangle and a phone shake. Actions open `ReportFlow` |
-
-Supporting pieces:
-- `primitives.tsx`:
-  - `HazardStripe`, `NeonBadge` and `CueChip`
-  - `ScoreRing`: animated arc with the text scaled to the ring; the arc is hidden at 0
-  - `StageStepper`: Rapport → Secrecy/Isolation → Request → Coercion
-- `GuardianPhone.tsx`: the guardian's lock screen. Banners land here, and the clock fades when CRITICAL takes over.
-- `ReportFlow.tsx`: multi-step flow to preserve evidence, report (cybercrime.gov.in / 1930 helpline), and block and lock.
-- `lib/sounds.ts`: `playChime` for L1/L2 and `playCritical` for the L3 siren, both synthesised with WebAudio.
-- Everything respects `prefers-reduced-motion`.
-
-### 4.5 Console (`src/console/`, and `/console` pop-out)
-
-- `Analytics.tsx`:
-  - `CaseCard`
-  - `ScoreChart`: SVG line of score over sim-days, with threshold bands
-  - `DebugFeed`: jumps to the newest entry on mount, then scrolls smoothly
-- `Segmented.tsx`: iOS segmented control used across settings.
-
-### 4.6 State and data
-
-- `src/types.ts` defines `Side`, `Mode`, `Backend`, `Level`, `Cue`, `Stage`, `CueHit`, `Analysis`, `ChatMessage` and `AlertItem`. These **mirror the planned `packages/shared`**, so the engine should emit exactly these shapes.
-- `src/data/meta.ts` holds the constants: `CUE_META` (label, icon, colour, weight), `STAGES`, `LEVEL_META`, `THRESHOLDS` (2 / 5 / 9), `CUE_ACTIVE_P = 0.5`, `HALF_LIFE_DAYS = 7`, `SCORE_MAX = 12`, plus the demo personas (Kabir `#a3f9`, Meera, guardian Amma).
-- `src/data/scenario.ts` holds the six-day grooming script. Four messages carry **hand-computed** analyses (A1–A4) that hit the proposal's golden numbers, **1.0 → 2.9 → 8.4 → 10.9**, giving L0 → L1 → L2 → L3. `PREVIEW_BY_LEVEL` feeds the preview buttons.
-- `src/store.ts` is a zustand store with a pure `reduce(state, action)` function:
-  - **Actions:**
-    - session: `reset`, `setMode`, `setBackend`, `setSound`, `setSpeed`, `setPlaying`, `setCursor`, `setDay`
-    - messages: `typing`, `push`, `analyzing`, `analysis`
-    - alerts: `preview`, `dismissNudge`, `closeNudge`, `closeBanner`, `openSheet`, `closeSheet`, `closeCritical`, `openReport`, `closeReport`
-    - sync: `snapshot`
-  - On an `analysis` action, the store updates the score/level/stage/history and, if level ≥ 1, calls `route()`. `route()` sends L1 to the child's nudge, L2 to the guardian banner and L3 to the critical takeover.
-  - **Player:** `play`, `pause`, `stepOnce` and `resetDemo` walk the `SCENARIO` with typing delays. A `runToken` cancels stale loops.
-  - `sendLive(side, text)` is what Mode B uses. It **only pushes the message**. No analysis happens yet.
+- **Simulation** (`pages/Simulation.tsx`): status pill (real model state); Settings has *Analysis backend*
+  (Hybrid · Local / ChatGPT · Cloud), the ChatGPT connection panel, and a *Test case* picker; the dock gets
+  **Analyze with ChatGPT** when the cloud backend is selected; the progress bar marks where alerts *actually* fired.
+- **Engine drawer**: tabs *Case*, *Evidence* (case memory with provenance), *Trace* (per-message RoBERTa score, Qwen
+  verdict, fusion agreement, rule trace, measured latency), *Models* (live status + full validated latest run). ↻
+  re-analyses every chat (idempotent).
+- **Chats** (`chat/ChatScreen.tsx`): messages are scoped to the active conversation; group chats show sender names; the
+  back arrow opens an iMessage-style chat list; Mode B can create private or group chats; the left phone has a sender
+  picker in groups.
+- **Alerts**: same components. Copy is category-aware (bullying vs potential grooming), the guardian sheet adds "AI-detected
+  warning signs, not a confirmed offence", and the child's *Dismiss* and *Block* now feed the engine's dismissal and
+  linked-contact rules.
+- **Landing**: copy updated to describe the real backends honestly (laptop prototype, not yet on-device mobile).
+- Preview L1/L2/L3 buttons still show the design with precomputed data, labelled as previews.
 
 ---
 
-## 5. Launch video (`/brag`), done
+## 5. Launch video (`/brag`)
 
-Files in `rakshak/apps/web/brag-output/`:
-
-| File | What |
-|---|---|
-| `brag.mp4` | 20 s, 1920×1080, 30 fps, H.264 + AAC 192k, ~5.3 MB. Frame 0 is the poster |
-| `brag.jpg` | Poster: "Harm builds message by message", four bubbles with cue chips, the 10.9 ring and the L3 badge |
-| `share-copy.txt` | Caption ready to post |
-| `brag-plan.md` | Creative angle, storyboard and readability check |
-| `work/` | The pipeline used to build it (below) |
-
-**Story:** Hook ("one message looks harmless") → Pattern (cues building over six days) → Reveal (score climbs to 10.9) → L1/L2/L3 shown on the real phone components → Outro (RAKSHAK, Team Git Happens).
-
-**Pipeline (`work/`), in case you need to re-render:**
-1. `composition/` is a React page that reuses the app's real components and `styles.css`. It exposes `window.__seek(t)`, `__ready` and `__duration = 20`. Each frame is a pure function of `t`: React renders with `flushSync`, and all CSS animations are paused and seeked through `document.getAnimations()`.
-2. `capture.mjs` drives headless Chrome over raw CDP (no npm deps; uses Node's global WebSocket) and screenshots 600 JPEG frames into `frames/`.
-3. `soundtrack.py` (numpy) synthesises the music: 96 BPM, D minor, 20 s, 48 kHz, about −14.8 LUFS. Visual events are snapped to the 16th-note grid.
-4. ffmpeg (installed via scoop) muxes the frames and the WAV into `brag.mp4`.
-
-**Cleanup:** `work/frames/` (~72 MB) and `work/chrome-profile/` (~74 MB) are throwaway. Delete them before zipping or committing. Add `brag-output/work/frames`, `brag-output/work/chrome-profile` and `*.wav` to `.gitignore`.
-
-The soundtrack was checked by measurement only (loudness, peaks); nobody has listened to it critically. Give it one listen before posting.
+Unchanged; see `rakshak/apps/web/brag-output/`. `.gitignore` now excludes its frames, stills, Chrome profile and WAVs.
 
 ---
 
-## 6. How the engine plugs into the existing UI
+## 6. How analysis works (summary; details in README §5)
 
-The UI already consumes the engine's output format. The integration contract:
-
-```ts
-// What the engine must produce for each message (already defined in src/types.ts)
-interface Analysis {
-  cues: { cue: Cue; p: number }[];   // classifier output, p in [0,1]; ≥ 0.5 counts as active
-  score: number;                     // case score after decay, combos, floors, reductions
-  level: 0 | 1 | 2 | 3;
-  stage: 'rapport' | 'secrecy_isolation' | 'request' | 'coercion';
-  trace: string[];                   // human-readable lines shown in the Message trace tab
-  latency: { gpt: number; inhouse: number };
-  alert?: { guardianTitle: string; guardianBody: string };
-}
+```
+message ─▶ POST /api/messages ─▶ POST /api/analyze
+  context: this chat (focus + evidence-bearing + recent, token-budgeted) + prior findings + cross-chat evidence
+  RoBERTa(focus msgs) ∥ Qwen(whole context, schema-constrained, IDs aliased)
+  → validation (IDs, targets, enums) → verification pass (new uncorroborated claims)
+  → fusion (agree / contextual_only / context_override / needs_review; banter mutuality check)
+  → reconcile evidence (stable keys, supersede, retract, merge) → response
+browser: computeRisk(evidence) → score/level/stage/tracks/trace → decideAlerts → route to L1/L2/L3 UI
+         → persist snapshot + alerts (server de-duplicates)
 ```
 
-**Integration points:**
-1. **Mode A:** in `store.ts` → `runStep()`, replace `step.analysis` (precomputed) with `await engine.analyze(message, caseState)`. Keep the precomputed values as the **golden test expectations**.
-2. **Mode B:** in `sendLive()`, after `push`, dispatch `analyzing`, call the engine, then dispatch `{ type: 'analysis', id, analysis }`. Everything downstream (routing, alerts, charts, trace) already works.
-3. **Backend switch:** `data.backend` (`'gpt' | 'inhouse'`) is already in the store and in Settings. The engine should pick its classifier from it.
-4. **Sim clock:** `data.simDay` already exists (Settings → sim clock). Decay and the 14-day new-contact floor should use it, not wall time.
+Key engineering points for judges:
+- Qwen is never gated on RoBERTa; RoBERTa never produces grooming cues.
+- The model never sets the score: it reports evidence; the engine (config in `packages/engine/config.json`) decides.
+- Same evidence twice never counts twice (stable evidence keys; the engine is a pure function of the evidence set).
+- Group chats: per-sender attribution, model-identified targets, harm aimed at others recorded but not scored for the child.
+- Cross-chat: the bullying track sums across all of the child's chats; accounts are never merged by guesswork.
+- Stale results: generation counter + watermark on the server, epoch on the client.
 
 ---
 
-## 7. What is pending
+## 7. Measured on this laptop (RTX 5060 Laptop 8 GB, 24 GB RAM, Windows 11)
 
-Ordered roughly by priority. Section numbers point to `Plan.md`.
-
-### 7.1 Engine core: `packages/engine` (HIGHEST PRIORITY)
-
-A pure TypeScript package with no UI dependency, unit-tested with Vitest.
-
-- [ ] **Normaliser:** lowercase, leetspeak (`s3cr3t → secret`), repeated-char squash, emoji → tokens (🤫 → secret), Tanglish transliteration and common spellings (e.g. "yaarukum sollatha" → don't tell anyone). Tamil-script handling.
-- [ ] **Classifier interface:** `classify(text, context) → CueHit[]`, with implementations behind it (7.2, 7.3, plus a keyword baseline).
-- [ ] **KeywordClassifier:** a regex/lexicon baseline. Build it first so the scoring can be tested before any ML exists.
-- [ ] **Case memory:** per contact. Holds the first-seen date, the cue history with days, the current score, stage, and dismissals. Encrypted at rest (WebCrypto AES-GCM in IndexedDB) for the on-device story.
-- [ ] **Scoring (all values in `config.json`):**
-  - weights: flattery/age 1, secrecy 2, isolation 2, platform move 2, image request 3, meeting request 3, disable protection 4, threat/payment 4, insult/harassment 1
-  - decay: `score × 0.5^(Δdays/7)`
-  - combo: secrecy/isolation followed by an image or meeting request → ×2
-  - thresholds: 2 → L1, 5 → L2, 9 → L3
-  - floors: threat/payment → L3; a request from a contact first seen under 14 days ago → L2; disable-protection → L2
-  - reductions: quote/counterspeech ×0.3; dismissal ×0.5, but never below L1 and never at the Request/Coercion stage
-  - bullying: harassment scores summed across senders
-  - linked contacts: a new contact within 24 h of a block inherits the case
-- [ ] **Stage inference:** the four-stage model from the active cues.
-- [ ] **Response policy:** level → who is alerted, and what the guardian sees (`guardianTitle` / `guardianBody`). Guardians get a **summary, never the raw chat text**: a privacy promise from the proposal.
-- [ ] **Trace output:** human-readable lines for the debug feed.
-- [ ] **Golden test:** the six-day scenario must produce **1.0 → 2.9 → 8.4 → 10.9** and L0 → L1 → L2 → L3. Add tests for decay, each floor, each reduction, combos, bullying sums and linked contacts.
-- [ ] Wire the engine into `store.ts` (§6) and delete the hard-coded analyses from the runtime path.
-
-### 7.2 GPT classifier backend (§3.1)
-
-- [ ] **Decide:** do we have **OpenAI API credits**? A ChatGPT Plus/Pro subscription does **not** include API access. Without credits, lead with the in-house model.
-- [ ] `apps/server`: a small Node (Express/Fastify) **Classifier Gateway** at `POST /api/classify`. The API key lives in `.env` on the server, never in the browser.
-- [ ] Prompt (`prompts/`): a system prompt with the cue definitions, Tanglish few-shot examples and hard negatives.
-- [ ] **Structured outputs**, a JSON schema returning `{ cue, p }[]`, at temperature 0.
-- [ ] Response cache keyed by normalised text, so demos are repeatable and work offline.
-- [ ] Timeout plus fallback to the in-house or keyword classifier. Report the real measured latency in `Analysis.latency.gpt`.
-- [ ] Note: only the classifier is GPT. **Scoring stays deterministic** in the engine.
-
-### 7.3 In-house model (§3.2)
-
-- [ ] `training/`: build a labelled dataset. Combine GPT pre-labelling (if there are credits), hand-written Tanglish examples and hard negatives (surprise party, banter, quoting the news).
-- [ ] Stage 1: **char n-gram + logistic regression**, multi-label. Fast, tiny, robust to misspellings. Export it as JSON weights or ONNX.
-- [ ] Stage 2: **bert-tiny** fine-tune → ONNX. Stage 3 (stretch): IndicBERT for Tamil/Tanglish.
-- [ ] `packages/classifiers/InHouseClassifier`: run the model in the browser with **onnxruntime-web** (WASM). Store the files in `models/`.
-- [ ] Eval script: per-cue precision/recall on a held-out set, plus a comparison table against GPT and keywords for the pitch.
-
-### 7.4 Realtime relay server and Mode B across devices (§5)
-
-- [ ] `apps/server`: **Socket.IO** relay with **rooms by code**, so two laptops or phones can join one chat.
-- [ ] A "Join room" screen in the web app. Replace the BroadcastChannel sync with sockets when a room is active, and keep BroadcastChannel for the single-laptop demo.
-- [ ] The engine runs on the **victim client**. With GPT, only the classify call goes to the server.
-- [ ] The sim-clock "+1 day" control must drive decay in Mode B too.
-
-### 7.5 Mode A done properly (§4)
-
-- [ ] **Scenario Director:** scenario files made of beats `{ stage, cueIntent, simDay, speaker }` in `scenarios/`.
-- [ ] More scenarios (currently only the six-day grooming one exists):
-  - [ ] Sextortion ring replayed from rotating accounts (tests linked contacts and the threat floor)
-  - [ ] Multi-sender bullying pile-on (tests the harassment sum)
-  - [ ] Platform-move / cross-app case
-  - [ ] Hard negatives: surprise-party secret, friend banter, quoting the news (**must stay L0**)
-  - [ ] Adversarial: misspellings, leetspeak, emoji, Tamil script
-- [ ] A scenario picker in Settings.
-- [ ] GPT voices the **victim** replies and paraphrased variants. Predator lines stay **hand-scripted**, because models refuse that role and scripts are safe and deterministic on stage.
-- [ ] Offline fallback: pre-recorded runs with cached classifier outputs, in case the venue Wi-Fi fails.
-
-### 7.6 UI follow-ups (after the engine lands)
-
-- [ ] Switching the backend should visibly change real latency and confidence values. "GPT vs In-house" comparison view (Plan §8, step 7).
-- [ ] "3 setups" view: keyword vs GPT vs in-house on the same message.
-- [ ] Loading/"analysing…" state when the classifier is slow (the `analyzing` action exists, but the visuals only exist for the scripted delay).
-- [ ] Error states: gateway down, model failed to load.
-- [ ] A mobile layout pass for the single-phone routes on a real phone (needed once Mode B is cross-device).
-- [ ] Accessibility pass: focus order in the sheets and takeover, and screen-reader labels on alerts.
-- [ ] Optional: a vertical (9:16) cut of the launch video for Instagram/WhatsApp status.
-
-### 7.7 Housekeeping
-
-- [ ] `git init` at `rakshak/`. **The project is not under version control yet.** Add a `.gitignore` covering `node_modules`, `dist`, `brag-output/work/frames`, `brag-output/work/chrome-profile` and `*.wav`.
-- [ ] Turn `rakshak/` into an npm workspace when `packages/*` and `apps/server` arrive.
-- [ ] Delete the stale `apps/web/dist/` or rebuild it.
+- Qwen3.5 4B Q4_K_M at 8192 context: **3.36 GB VRAM** (4.0 GB total GPU use), fully on GPU.
+- Inference service with RoBERTa on CPU: ~680 MB RAM; RoBERTa ~30 ms per message after load (~4–16 s cold load).
+- End-to-end analysis per message: typically **3–8 s** (Qwen ~2.5–6 s, plus ~1 s when the verification pass runs).
+- Real-model evaluation: see `rakshak/eval/reports/latest.md` (includes misses).
+- MacBook Air M4 16 GB: **not tested by us**. Expect Ollama on Metal and RoBERTa on CPU to fit comfortably; latency unknown.
 
 ---
 
-## 8. Open questions (decide as a team)
+## 8. What is pending
 
-1. **Hackathon rules:** can we bring pre-written code, pre-trained models and prompts, or must everything be built during the event? This decides whether the existing UI counts and whether the model can be trained in advance.
-2. **OpenAI API credits:** do we have them, and how much? This decides whether the GPT backend is real or a stretch goal.
-3. **Demo setup:** one laptop with three windows (works today), or separate devices for predator, victim and guardian (needs §7.4)?
-4. **Default backend on stage:** GPT (better on Tanglish) or in-house (the stronger on-device privacy story)? Suggestion: **in-house by default, with GPT as a toggle**. That leads with privacy and still shows the accuracy comparison.
+### 8.1 Before the demo
+- [ ] **Owner:** run `npm run setup:siwc`, `npm run companion`, then *Continue with ChatGPT* in Settings. Confirm a model is
+      listed and one owner-initiated analysis works. Until then the ChatGPT path is untested. Decide whether to show it at
+      all given the Terms caveat (README §6).
+- [ ] Rehearse each test case once on the demo laptop and keep the Ollama model warm (`keep_alive 30m` is set).
+- [ ] Re-run `npm run eval` after any prompt change and read the report, not just the totals.
+
+### 8.2 Known weaknesses to work on
+- [ ] Qwen3.5 4B still mislabels some messages (see eval report). Ideas: few-shot examples from the misses, a larger model
+      on the Mac (`RAKSHAK_QWEN_MODEL=qwen3.5:9b` if memory allows), or calibrating per-cue thresholds on more data.
+- [ ] Tanglish / Tamil script: RoBERTa is English-only; Qwen handles some Tanglish. Needs a test set.
+- [ ] Latency grows with very long chats; the context budget keeps evidence but drops plain older chatter.
+
+### 8.3 Not started (from Plan.md)
+- [ ] Socket.IO relay so Mode B works across devices (§7.4 of the old plan).
+- [ ] In-browser on-device model (ONNX) for a true phone story. The current "local" backend runs on the laptop.
+- [ ] "3 setups" comparison view (keyword vs model vs model + memory).
+- [ ] Encrypted-at-rest case memory (SQLite is plain on disk; synthetic data only).
+- [ ] `git init` at `rakshak/` (a `.gitignore` is ready).
 
 ---
 
-## 9. Suggested next steps and owners
+## 9. Open questions
 
-Following the team split in Plan §8:
-
-| Member | Next task |
-|---|---|
-| 1 (UI) | §7.6 follow-ups; scenario picker; analysing/error states once the engine API is fixed |
-| 2 (Engine) | **§7.1 engine + golden test**, then wire it into `store.ts` |
-| 3 (Server) | §7.2 Classifier Gateway + prompt/schema/cache; §7.4 Socket.IO rooms |
-| 4 (Model) | §7.3 dataset → n-gram LR → bert-tiny ONNX → eval table |
-
-**Order:** engine with KeywordClassifier and the golden test → wire it into the UI → in-house n-gram model → GPT gateway (if there are credits) → Socket.IO Mode B → more scenarios → comparisons and polish.
+1. **ChatGPT backend and the SIWC Terms:** keep it as an owner-only, synthetic-data comparison, or drop it from the pitch?
+2. **Hackathon rules:** pretrained weights (RoBERTa, Qwen) are used as-is. Confirm that is allowed and say so plainly on stage.
+3. **Default backend on stage:** local hybrid (privacy story, no internet) is the recommendation.
 
 ---
 
-## 10. Gotchas learned so far
+## 10. Gotchas
 
 - Port 5173 is someone else's app on this machine. Use **5280**.
-- Anything that writes lots of files inside `apps/web/` (Chrome profiles, frame dumps) triggers Vite reloads unless it is added to `server.watch.ignored`.
-- A full HMR reload resets the demo state. That is expected, not a bug.
+- Anything that writes lots of files inside `apps/web/` triggers Vite reloads unless it is in `server.watch.ignored`.
+- A full HMR reload resets the in-browser state; the server-side case memory survives and is re-hydrated.
 - Chat auto-scroll must run inside `requestAnimationFrame`, after the new bubble is laid out.
-- Phones are scaled with the `--phone-scale` CSS variable. Don't hard-code pixel sizes in phone content.
+- Phones are scaled with `--phone-scale`. Don't hard-code pixel sizes in phone content.
 - CRITICAL content needs about 62 px of top padding to clear the dynamic island.
-- If the machine runs low on memory, Claude Code may kill the dev server. Restart it with `npm run dev`.
+- Windows consoles: run Python with `PYTHONIOENCODING=utf-8` (the npm scripts do) or emoji in chats crash prints.
+- `npm run server` sets `HF_HUB_OFFLINE=1`; set `RAKSHAK_ALLOW_DOWNLOAD=1` the first time if you skipped the setup script.
+- Changing a prompt file needs a server restart (prompts are cached at load).
+- Zustand selectors must not build new objects each call (use `useMemo`), or React loops.
+- In dev builds `window.__rakshak` exposes the store for `scripts/e2e-browser.mjs`; it is absent from production builds.

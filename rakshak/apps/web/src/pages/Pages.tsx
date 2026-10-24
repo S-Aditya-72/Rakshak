@@ -4,7 +4,7 @@ import { GuardianPhone } from '../alerts/GuardianPhone';
 import { NudgeCard } from '../alerts/NudgeCard';
 import { ChatScreen } from '../chat/ChatScreen';
 import { PhoneFrame } from '../chat/PhoneFrame';
-import { CaseCard, DebugFeed, ScoreChart } from '../console/Analytics';
+import { CaseCard, DebugFeed, EvidencePanel, ModelsPanel, ScoreChart } from '../console/Analytics';
 import { usePhoneScale } from '../lib/hooks';
 
 /** Pop-out window: guardian phone + engine panels. Controlled from the simulation window. */
@@ -24,7 +24,7 @@ export function ConsolePage() {
         <div className="sim-title">
           Guardian & engine<span className="sim-title-sub">synced window</span>
         </div>
-        <span className="sim-note">UI preview · dummy data</span>
+        <span className="sim-note">mirrors the main window</span>
       </header>
       <main className="console-main">
         <GuardianPhone />
@@ -32,6 +32,8 @@ export function ConsolePage() {
           <CaseCard />
           <ScoreChart />
           <DebugFeed />
+          <EvidencePanel />
+          <ModelsPanel />
         </aside>
       </main>
     </div>

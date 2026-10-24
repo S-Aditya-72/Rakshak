@@ -1,0 +1,55 @@
+{
+  "id": "e5-quoted",
+  "title": "Quoted abuse reported by a friend",
+  "child": {
+    "id": "p-meera",
+    "name": "Meera"
+  },
+  "participants": [
+    {
+      "id": "p-riya",
+      "name": "Riya",
+      "role": "peer"
+    }
+  ],
+  "conversations": [
+    {
+      "id": "e5-c",
+      "kind": "private",
+      "title": "Riya",
+      "participants": [
+        "p-meera",
+        "p-riya"
+      ]
+    }
+  ],
+  "messages": [
+    {
+      "conv": "e5-c",
+      "from": "p-riya",
+      "day": 1,
+      "time": "4:00 PM",
+      "text": "arjun literally said 'meera is a loser and nobody likes her' in class today"
+    },
+    {
+      "conv": "e5-c",
+      "from": "p-riya",
+      "day": 1,
+      "time": "4:00 PM",
+      "text": "i told him to shut up and that it's not true. you ok?"
+    }
+  ],
+  "expect": {
+    "level": [
+      0,
+      1
+    ],
+    "categories": [],
+    "target": null,
+    "offenders": [],
+    "nonOffenders": [
+      "p-riya"
+    ],
+    "mustNotAlert": true
+  }
+}

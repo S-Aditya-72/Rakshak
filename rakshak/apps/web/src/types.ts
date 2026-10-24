@@ -1,26 +1,26 @@
-// Shared UI types. These mirror packages/shared from Plan.md so the engine can plug in later.
+// UI types. Engine/contract types live in packages/shared and packages/engine; these are the shapes the UI renders.
+
+import type { AnalysisResult, CueId } from '@rakshak/shared';
 
 export type Side = 'predator' | 'victim';
 export type Mode = 'A' | 'B';
+/** UI backend keys: 'inhouse' = RAKSHAK Hybrid (local), 'gpt' = ChatGPT (cloud, Sign in with ChatGPT). */
 export type Backend = 'gpt' | 'inhouse';
 export type Level = 0 | 1 | 2 | 3;
 
-export type Cue =
-  | 'flattery_age'
-  | 'secrecy'
-  | 'isolation'
-  | 'platform_move'
-  | 'image_request'
-  | 'meeting_request'
-  | 'disable_protection'
-  | 'threat_payment'
-  | 'insult_harassment';
+export type Cue = CueId;
 
 export type Stage = 'rapport' | 'secrecy_isolation' | 'request' | 'coercion';
+export type Category = 'grooming' | 'bullying' | 'none';
 
 export interface CueHit {
   cue: Cue;
   p: number;
+  /** Fusion/evidence status, when this came from a real run. */
+  status?: 'active' | 'needs_review' | 'superseded' | 'suppressed';
+  agreement?: string;
+  modifier?: string;
+  targetId?: string | null;
 }
 
 export interface Analysis {
@@ -29,14 +29,24 @@ export interface Analysis {
   level: Level;
   stage: Stage;
   trace: string[];
-  latency: Record<Backend, number>;
+  /** Measured latency of the backend that produced this analysis. */
+  latency: Partial<Record<Backend, number>>;
   alert?: { guardianTitle: string; guardianBody: string };
+  category?: Category;
+  /** The real model run behind this analysis. Absent for presentation previews. */
+  run?: AnalysisResult;
+  /** True for the precomputed presentation preview (not live AI output). */
+  preview?: boolean;
 }
 
 export interface ChatMessage {
   id: string;
   kind: 'msg' | 'day';
   from?: Side;
+  /** Conversation this row belongs to. */
+  conversationId?: string;
+  /** Participant id of the sender (msg rows). */
+  senderId?: string;
   text: string;
   day: number;
   time: string;
@@ -55,4 +65,19 @@ export interface AlertItem {
   guardianBody: string;
   cues: { cue: Cue; day: number }[];
   preview?: boolean;
+  category?: Category;
+  trackKey?: string;
+}
+
+export interface ParticipantView {
+  id: string;
+  displayName: string;
+  role: 'protected_child' | 'contact' | 'peer';
+}
+
+export interface ConversationView {
+  id: string;
+  kind: 'private' | 'group';
+  title: string;
+  participantIds: string[];
 }

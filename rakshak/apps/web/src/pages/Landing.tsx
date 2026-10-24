@@ -134,7 +134,7 @@ const STATS = [
 
 const PIPELINE = [
   { icon: Languages, t: 'Normalise', d: 'Leetspeak, emoji and Tanglish are cleaned up and transliterated.' },
-  { icon: Brain, t: 'Classify', d: 'GPT or our in-house model labels nine grooming and bullying cues.' },
+  { icon: Brain, t: 'Classify', d: 'RoBERTa flags overt abuse per message; Qwen3.5 (local) or ChatGPT reads the whole conversation.' },
   { icon: Database, t: 'Remember', d: 'An encrypted per-contact memory keeps the history across days.' },
   { icon: Activity, t: 'Score', d: 'Cues add weight, decay with a 7-day half-life, and multiply in sequence.' },
   { icon: BellRing, t: 'Respond', d: 'Transparent thresholds decide: nudge, alert, or guided report.' },
@@ -286,28 +286,28 @@ export function LandingPage() {
 
       {/* privacy */}
       <section id="privacy" className="l-section">
-        <SectionHead eyebrow="Privacy" title={<>Raw message text never leaves the phone.</>} sub="Two interchangeable classifiers feed the same transparent scoring engine, and we're honest about the difference." />
+        <SectionHead eyebrow="Privacy" title={<>In local mode, message text never leaves the device.</>} sub="Two interchangeable analysis backends feed the same transparent scoring engine, and we're honest about the difference." />
         <div className="privacy-grid">
           <Reveal className="priv-card">
             <div className="priv-icon teal">
               <Cpu size={20} />
             </div>
-            <div className="priv-t">In-house model · on-device</div>
-            <p>Our own small classifier runs inside the child's phone. Nothing is sent anywhere. This is RAKSHAK's production design.</p>
+            <div className="priv-t">RAKSHAK Hybrid · local</div>
+            <p>RoBERTa and Qwen3.5 4B run on this laptop, feeding our own fusion, case memory and scoring. Nothing is sent anywhere. A laptop prototype of the on-device design, not yet a phone app.</p>
           </Reveal>
           <Reveal className="priv-card" delay={0.1}>
             <div className="priv-icon blue">
               <Cloud size={20} />
             </div>
-            <div className="priv-t">GPT · cloud prototype mode</div>
-            <p>One message at a time, with names masked, is labelled by GPT. Fast to build and strong on Tanglish. A stepping stone, clearly labelled.</p>
+            <div className="priv-t">ChatGPT · cloud, owner-initiated</div>
+            <p>The owner signs in with ChatGPT and presses Analyze; the synthetic conversation goes to OpenAI. Never automatic, never triggered by someone else's typing.</p>
           </Reveal>
           <Reveal className="priv-card" delay={0.2}>
             <div className="priv-icon green">
               <Lock size={20} />
             </div>
             <div className="priv-t">Minimal guardian payload</div>
-            <p>Parents see cue types, dates, stage and score. Stored on device: cue labels and short redacted excerpts, 30-day retention.</p>
+            <p>Parents see cue types, dates, stage and score, never message text. Evidence is stored locally with a 30-day scoring window.</p>
           </Reveal>
         </div>
       </section>
@@ -321,8 +321,8 @@ export function LandingPage() {
               <div className="launch-icon">
                 <Bot size={24} />
               </div>
-              <div className="launch-t">AI simulation</div>
-              <p>Watch the scripted six-day scenario play out across the contact's, child's and guardian's phones, with every alert firing on cue.</p>
+              <div className="launch-t">Test cases</div>
+              <p>Five scripted conversations (banter, bullying, grooming, multi-day multi-chat, group pile-on) run through the real models. Alerts follow the live analysis.</p>
               <span className="launch-go">
                 Start <ArrowRight size={15} />
               </span>
@@ -334,7 +334,7 @@ export function LandingPage() {
                 <MessagesSquare size={24} />
               </div>
               <div className="launch-t">Live chat</div>
-              <p>Two people chat on two screens. RAKSHAK watches the child's side in real time. Open each phone in its own window.</p>
+              <p>Type anything on either phone, open private or group chats and skip days. Every new message is analysed for real, with memory across chats.</p>
               <span className="launch-go">
                 Start <ArrowRight size={15} />
               </span>

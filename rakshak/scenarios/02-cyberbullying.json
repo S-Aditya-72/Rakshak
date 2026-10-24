@@ -1,0 +1,120 @@
+{
+  "id": "s2-bullying",
+  "number": 2,
+  "title": "Cyberbullying",
+  "subtitle": "One classmate targets Meera over four days",
+  "tests": "Repeated targeting, evidence retention, rising risk",
+  "child": {
+    "id": "p-meera",
+    "name": "Meera"
+  },
+  "participants": [
+    {
+      "id": "p-dev",
+      "name": "Dev",
+      "role": "peer"
+    }
+  ],
+  "conversations": [
+    {
+      "id": "s2-c-dev",
+      "kind": "private",
+      "title": "Dev",
+      "participants": [
+        "p-meera",
+        "p-dev"
+      ]
+    }
+  ],
+  "messages": [
+    {
+      "conv": "s2-c-dev",
+      "from": "p-dev",
+      "day": 1,
+      "time": "5:12 PM",
+      "text": "saw your speech in class lol. embarrassing"
+    },
+    {
+      "conv": "s2-c-dev",
+      "from": "p-meera",
+      "day": 1,
+      "time": "5:14 PM",
+      "text": "it wasn't that bad?"
+    },
+    {
+      "conv": "s2-c-dev",
+      "from": "p-dev",
+      "day": 1,
+      "time": "5:14 PM",
+      "text": "everyone was laughing at you not with you 😂"
+    },
+    {
+      "conv": "s2-c-dev",
+      "from": "p-dev",
+      "day": 2,
+      "time": "1:02 PM",
+      "text": "nobody wants you at our lunch table btw. just sit somewhere else"
+    },
+    {
+      "conv": "s2-c-dev",
+      "from": "p-meera",
+      "day": 2,
+      "time": "1:05 PM",
+      "text": "why are you being like this"
+    },
+    {
+      "conv": "s2-c-dev",
+      "from": "p-dev",
+      "day": 2,
+      "time": "1:05 PM",
+      "text": "because you're annoying and weird. everyone thinks so"
+    },
+    {
+      "conv": "s2-c-dev",
+      "from": "p-dev",
+      "day": 3,
+      "time": "8:40 PM",
+      "text": "made a new group without you. don't even try to join"
+    },
+    {
+      "conv": "s2-c-dev",
+      "from": "p-meera",
+      "day": 3,
+      "time": "8:44 PM",
+      "text": "please stop"
+    },
+    {
+      "conv": "s2-c-dev",
+      "from": "p-dev",
+      "day": 3,
+      "time": "8:45 PM",
+      "text": "cry about it. you're such a loser"
+    },
+    {
+      "conv": "s2-c-dev",
+      "from": "p-dev",
+      "day": 4,
+      "time": "7:15 AM",
+      "text": "and if you tell the teacher you'll regret it"
+    }
+  ],
+  "expect": {
+    "level": [
+      2,
+      3
+    ],
+    "categories": [
+      "bullying"
+    ],
+    "target": "p-meera",
+    "offenders": [
+      "p-dev"
+    ],
+    "nonOffenders": [],
+    "mustNotAlert": false,
+    "requiredCues": [
+      "exclusion",
+      "intimidation"
+    ]
+  }
+}

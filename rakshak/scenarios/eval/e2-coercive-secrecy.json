@@ -1,0 +1,71 @@
+{
+  "id": "e2-coercive",
+  "title": "Contextual coercive secrecy",
+  "child": {
+    "id": "p-meera",
+    "name": "Meera"
+  },
+  "participants": [
+    {
+      "id": "p-vikram",
+      "name": "Vikram",
+      "role": "contact"
+    }
+  ],
+  "conversations": [
+    {
+      "id": "e2-c",
+      "kind": "private",
+      "title": "Vikram",
+      "participants": [
+        "p-meera",
+        "p-vikram"
+      ]
+    }
+  ],
+  "messages": [
+    {
+      "conv": "e2-c",
+      "from": "p-vikram",
+      "day": 1,
+      "time": "9:00 PM",
+      "text": "you're honestly the only one who understands me"
+    },
+    {
+      "conv": "e2-c",
+      "from": "p-vikram",
+      "day": 2,
+      "time": "10:30 PM",
+      "text": "you can trust me. don't tell your parents we talk, they'd just ruin it like always"
+    },
+    {
+      "conv": "e2-c",
+      "from": "p-meera",
+      "day": 2,
+      "time": "10:32 PM",
+      "text": "ok i won't"
+    },
+    {
+      "conv": "e2-c",
+      "from": "p-vikram",
+      "day": 3,
+      "time": "10:45 PM",
+      "text": "what's your address? i want to send you a little gift. and when are your parents usually out?"
+    }
+  ],
+  "expect": {
+    "level": [
+      1,
+      3
+    ],
+    "categories": [
+      "grooming"
+    ],
+    "target": "p-meera",
+    "offenders": [
+      "p-vikram"
+    ],
+    "nonOffenders": [],
+    "mustNotAlert": false
+  }
+}

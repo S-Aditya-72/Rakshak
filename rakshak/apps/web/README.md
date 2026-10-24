@@ -1,21 +1,36 @@
-# RAKSHAK web demo (UI only)
+# RAKSHAK web app
 
-UI preview with dummy data. The engine is not connected yet (see `../../../Plan.md`).
+The React UI: three phones (other participants, the protected child, the guardian), alerts, and the engine console.
+It renders **real analysis** from the local inference service (`apps/server`, proxied at `/api`) and computes risk with
+the deterministic engine (`packages/engine`). See the [project README](../../README.md) for setup.
 
 ```bash
+# from rakshak/
 npm install
+npm run server     # inference service (needed for live analysis)
 npm run dev        # http://127.0.0.1:5280
+npm run build      # type-check + production build
 ```
 
 | Route | What it shows |
 |---|---|
 | `/#/` | Landing page |
-| `/#/sim?mode=A` | Simulation: AI scenario (`mode=B` for live chat) |
-| `/#/predator` | Predator chat only (pop-out) |
-| `/#/victim` | Child's chat only (pop-out) |
+| `/#/sim?mode=A` | Test cases (five scenarios, real pipeline) |
+| `/#/sim?mode=B` | Live chat: unscripted messages, private and group chats, multi-day |
+| `/#/predator` | Left phone only (pop-out) |
+| `/#/victim` | Child's phone only (pop-out) |
 | `/#/console` | Guardian phone + engine panels (pop-out) |
 
-Simulation shortcuts: `Space` play/pause · `→` step · `E` engine drawer · `R` reset.
+Shortcuts: `Space` play/pause · `→` step · `E` engine drawer · `R` reset.
 
-Windows stay in sync via `BroadcastChannel`, so each route can be opened on its own screen.
-Scenario data lives in `src/data/scenario.ts`; the engine will later replace its precomputed `analysis` blocks.
+Key files:
+- `src/store.ts`: state, the scenario player, the live analysis loop, stale-result protection, ChatGPT actions
+- `src/lib/api.ts`: typed client; validates every analysis against the shared zod contract
+- `src/lib/case.ts`: evidence → engine → per-message `Analysis` and de-duplicated `AlertItem`s
+- `src/console/Analytics.tsx`: case card, score chart, trace, evidence (case memory), models panels
+- `src/console/ChatGPTPanel.tsx`: Sign in with ChatGPT status, models, consent
+- `src/data/scenario.ts`: the precomputed six-day script, used only for the labelled *Presentation preview* and the
+  design *Preview L1/L2/L3* buttons
+
+Windows stay in sync via `BroadcastChannel`. In dev builds, `window.__rakshak` exposes the store for
+`scripts/e2e-browser.mjs`.

@@ -1,0 +1,12 @@
+# RAKSHAK local inference service. Torch is installed separately by scripts/setup-server.* so the right
+# build is chosen (CPU wheel on Windows/Linux by default, standard wheel with MPS on macOS).
+transformers==4.57.6
+tokenizers==0.22.2
+safetensors==0.8.0
+huggingface-hub==0.36.2
+fastapi==0.162.0
+uvicorn==0.54.0
+httpx==0.28.1
+pydantic==2.14.1
+pytest==9.1.1
+pytest-asyncio==1.4.0

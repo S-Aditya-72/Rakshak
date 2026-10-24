@@ -1,0 +1,244 @@
+{
+  "id": "s4-crosschat",
+  "number": 4,
+  "title": "Five days, four chats",
+  "subtitle": "Different people target Meera across private and group chats",
+  "tests": "Cross-conversation memory: evidence is linked to one child, never by guessing that accounts are the same person",
+  "child": {
+    "id": "p-meera",
+    "name": "Meera"
+  },
+  "participants": [
+    {
+      "id": "p-dev",
+      "name": "Dev",
+      "role": "peer"
+    },
+    {
+      "id": "p-arjun",
+      "name": "Arjun",
+      "role": "peer"
+    },
+    {
+      "id": "p-sana",
+      "name": "Sana",
+      "role": "peer"
+    },
+    {
+      "id": "p-kiran",
+      "name": "Kiran",
+      "role": "peer"
+    },
+    {
+      "id": "p-riya",
+      "name": "Riya",
+      "role": "peer"
+    }
+  ],
+  "conversations": [
+    {
+      "id": "s4-c-dev",
+      "kind": "private",
+      "title": "Dev",
+      "participants": [
+        "p-meera",
+        "p-dev"
+      ]
+    },
+    {
+      "id": "s4-c-riya",
+      "kind": "private",
+      "title": "Riya",
+      "participants": [
+        "p-meera",
+        "p-riya"
+      ]
+    },
+    {
+      "id": "s4-c-class",
+      "kind": "group",
+      "title": "8B Class 🏫",
+      "participants": [
+        "p-meera",
+        "p-arjun",
+        "p-sana",
+        "p-kiran",
+        "p-riya"
+      ]
+    },
+    {
+      "id": "s4-c-arjun",
+      "kind": "private",
+      "title": "Arjun",
+      "participants": [
+        "p-meera",
+        "p-arjun"
+      ]
+    }
+  ],
+  "messages": [
+    {
+      "conv": "s4-c-dev",
+      "from": "p-dev",
+      "day": 1,
+      "time": "6:10 PM",
+      "text": "why do you even bother talking in class. nobody cares what you think",
+      "caption": "Day 1 · a private chat with Dev"
+    },
+    {
+      "conv": "s4-c-dev",
+      "from": "p-meera",
+      "day": 1,
+      "time": "6:12 PM",
+      "text": "ok?"
+    },
+    {
+      "conv": "s4-c-dev",
+      "from": "p-dev",
+      "day": 1,
+      "time": "6:12 PM",
+      "text": "just saying. you're kind of a joke"
+    },
+    {
+      "conv": "s4-c-riya",
+      "from": "p-riya",
+      "day": 2,
+      "time": "5:00 PM",
+      "text": "did you finish the science worksheet?",
+      "caption": "Day 2 · an ordinary chat with Riya"
+    },
+    {
+      "conv": "s4-c-riya",
+      "from": "p-meera",
+      "day": 2,
+      "time": "5:03 PM",
+      "text": "almost! q4 is so hard"
+    },
+    {
+      "conv": "s4-c-riya",
+      "from": "p-riya",
+      "day": 2,
+      "time": "5:03 PM",
+      "text": "same lol, call later?"
+    },
+    {
+      "conv": "s4-c-class",
+      "from": "p-arjun",
+      "day": 3,
+      "time": "4:20 PM",
+      "text": "lol did everyone see meera trip in the corridor today 😂😂",
+      "caption": "Day 3 · the class group chat"
+    },
+    {
+      "conv": "s4-c-class",
+      "from": "p-sana",
+      "day": 3,
+      "time": "4:21 PM",
+      "text": "she walks like a broken robot"
+    },
+    {
+      "conv": "s4-c-class",
+      "from": "p-kiran",
+      "day": 3,
+      "time": "4:21 PM",
+      "text": "someone post the video 💀"
+    },
+    {
+      "conv": "s4-c-class",
+      "from": "p-meera",
+      "day": 3,
+      "time": "4:23 PM",
+      "text": "guys that's not funny"
+    },
+    {
+      "conv": "s4-c-class",
+      "from": "p-arjun",
+      "day": 3,
+      "time": "4:23 PM",
+      "text": "nobody asked you meera"
+    },
+    {
+      "conv": "s4-c-class",
+      "from": "p-sana",
+      "day": 3,
+      "time": "4:24 PM",
+      "text": "don't add her to the trip group btw"
+    },
+    {
+      "conv": "s4-c-riya",
+      "from": "p-riya",
+      "day": 4,
+      "time": "8:00 PM",
+      "text": "hey i saw what they said in the class group. that was so mean, you ok?",
+      "caption": "Day 4 · Riya checks in"
+    },
+    {
+      "conv": "s4-c-riya",
+      "from": "p-meera",
+      "day": 4,
+      "time": "8:02 PM",
+      "text": "not really 😔"
+    },
+    {
+      "conv": "s4-c-riya",
+      "from": "p-riya",
+      "day": 4,
+      "time": "8:02 PM",
+      "text": "ignore them, you're not alone ok? ❤️"
+    },
+    {
+      "conv": "s4-c-arjun",
+      "from": "p-arjun",
+      "day": 5,
+      "time": "9:15 PM",
+      "text": "saw you crying at recess lol",
+      "caption": "Day 5 · Arjun continues in a private chat"
+    },
+    {
+      "conv": "s4-c-arjun",
+      "from": "p-arjun",
+      "day": 5,
+      "time": "9:15 PM",
+      "text": "everyone in 8B thinks you're a freak"
+    },
+    {
+      "conv": "s4-c-arjun",
+      "from": "p-meera",
+      "day": 5,
+      "time": "9:17 PM",
+      "text": "leave me alone"
+    },
+    {
+      "conv": "s4-c-arjun",
+      "from": "p-arjun",
+      "day": 5,
+      "time": "9:17 PM",
+      "text": "or what? 😂 gonna cry to riya?"
+    }
+  ],
+  "expect": {
+    "level": [
+      2,
+      3
+    ],
+    "categories": [
+      "bullying"
+    ],
+    "target": "p-meera",
+    "offenders": [
+      "p-dev",
+      "p-arjun",
+      "p-sana",
+      "p-kiran"
+    ],
+    "nonOffenders": [
+      "p-riya"
+    ],
+    "mustNotAlert": false,
+    "conversationsWithEvidence": [
+      "s4-c-dev",
+      "s4-c-class",
+      "s4-c-arjun"
+    ]
+  }
+}
