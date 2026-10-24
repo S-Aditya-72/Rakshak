@@ -7,7 +7,7 @@ import json
 from functools import lru_cache
 from pathlib import Path
 
-from .contract import ASSESSMENTS, CONFIDENCES, CUES, MODIFIERS, PATTERN_TYPES
+from .contract import ASSESSMENTS, CONFIDENCES, CUES, MODIFIERS, PATTERN_TYPES, REQUEST_SUBJECTS
 
 PROMPT_VERSION = "analysis_system.v2"
 VERIFY_VERSION = "verify_findings.v2"
@@ -60,13 +60,14 @@ def output_schema(message_ids: list[str] | None = None, participant_ids: list[st
                     "properties": {
                         "message_id": mid,
                         "context_basis": {"type": "string"},
+                        "requested_subject": {"type": "string", "enum": list(REQUEST_SUBJECTS)},
                         "cue": {"type": "string", "enum": list(CUES)},
                         "target_id": tid,
                         "modifier": {"type": "string", "enum": list(MODIFIERS)},
                         "confidence": {"type": "string", "enum": list(CONFIDENCES)},
                         "rationale": {"type": "string"},
                     },
-                    "required": ["message_id", "context_basis", "cue", "target_id", "modifier", "confidence", "rationale"],
+                    "required": ["message_id", "context_basis", "requested_subject", "cue", "target_id", "modifier", "confidence", "rationale"],
                 },
             },
             "retractions": {

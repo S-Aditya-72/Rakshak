@@ -79,7 +79,7 @@ export interface ServerState {
   evidence: EvidenceEvent[];
   runs: AnalyzeResponse['result'][];
   snapshots: { day: number; score: number; level: number; stage: string; category: string; runId: string | null }[];
-  alerts: { id: string; backend: BackendId; trackKey: string; level: number; day: number; time: string; title: string; body: string; historical?: boolean }[];
+  alerts: { id: string; backend: BackendId; trackKey: string; level: number; day: number; time: string; title: string; body: string; historical?: boolean; withdrawn?: boolean; withdrawnReason?: string | null }[];
   alerted: Record<string, number>;
   dismissals: { day: number; trackKey: string | null }[];
   blocks: { contactId: string; day: number }[];
@@ -154,6 +154,8 @@ export const api = {
   snapshot: (childId: string, s: unknown) => call('POST', `/cases/${childId}/snapshots`, s),
   alert: (childId: string, a: { id: string; backend: BackendId; trackKey?: string; level: number; day: number; time: string; title: string; body: string; historical: boolean }) =>
     call<{ created: boolean }>('POST', `/cases/${childId}/alerts`, a),
+  withdrawAlert: (childId: string, alertId: string, b: { backend: BackendId; reason: string }) =>
+    call<{ withdrawn: boolean }>('POST', `/cases/${childId}/alerts/${encodeURIComponent(alertId)}/withdraw`, b),
   dismissal: (childId: string, d: { day: number; trackKey: string | null }) => call('POST', `/cases/${childId}/dismissals`, d),
   block: (childId: string, b: { contactId: string; day: number }) => call('POST', `/cases/${childId}/blocks`, b),
   chatgpt: {

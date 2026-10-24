@@ -52,6 +52,7 @@ export const AnalysisResultSchema = z.object({
       confidence: z.enum(CONFIDENCES),
       rationale: z.string(),
       contextBasis: z.string().nullable().optional(),
+      requestedSubject: z.string().nullable().optional(),
       verification: z.string().nullable().optional(),
     }),
   ),

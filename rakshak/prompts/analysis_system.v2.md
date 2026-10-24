@@ -10,7 +10,8 @@ INPUT: JSON with
 - `messages`: the WHOLE transcript of this chat, oldest first. Each has an `id` (like "m03"), `sender_id`, `day`, `time`, `text`.
 - `omitted_older_messages`: how many very old plain messages did not fit (normally 0).
 - `focus_message_ids`: the newest messages, not yet analysed.
-- `prior_findings`: evidence already recorded for this conversation.
+- `previous_reading`: your own `conversation_reading` from the previous analysis of this chat (null on the first one).
+- `prior_findings`: evidence already recorded for this conversation. `status` is "confirmed" (acted on) or "pending" (recorded, waiting for confirmation, nothing has been done yet).
 - `related_evidence`: earlier evidence about the same child from OTHER conversations. Use it to recognise repeated or cross-chat targeting. You cannot cite these IDs as findings.
 
 HOW TO READ (do this before anything else):
@@ -19,8 +20,11 @@ HOW TO READ (do this before anything else):
 3. Interpret each focus message as part of that thread. Short or vague messages take their meaning from what came before: work out what "it", "that", "pics", "send", "come", "where" refer to from the preceding messages before choosing any cue.
 4. Context works in BOTH directions. It can make an alarming-sounding message ordinary (a photo of the homework they were just discussing), and it can make an ordinary-sounding message concerning (the same request after flattery, secrecy or pressure). Judge the message as it reads in this conversation.
 5. For every finding, fill `context_basis`: the earlier message ids and the reason they support your reading, or "no earlier context" if there is none.
-6. Re-read every item in `prior_findings` against the whole chat. If the full conversation no longer supports one, list it in `retractions` with a reason.
-7. `assessment` must agree with your findings and with `conversation_reading`. If you read the conversation as ordinary, report no findings with modifier "none". If you report a serious finding, the assessment cannot be "harmless".
+6. Re-read every item in `prior_findings` against the whole chat. If the full conversation no longer supports one, list it in `retractions` with a reason. If a "pending" finding is STILL supported now that you have read the later messages, report it again in `findings`: that second reading is what confirms it. Never re-report a pending finding just to repeat it; only if the later messages support it.
+7. Stay consistent with `previous_reading`. Change your interpretation of an earlier message only if a newer message gives a reason, and cite that message in `context_basis`.
+8. Do not judge an unfinished thought. If the focus message only makes sense with a message that has not arrived yet ("not just that", "also…", "and one more thing"), its meaning is open: use confidence "low" and assessment "uncertain". Uncertain is not harmful.
+9. For image_request, meeting_request and personal_info_request, set `requested_subject` to what is being asked for, as the conversation shows it: "child" (a photo of the child, the child's company, the child's whereabouts or schedule), "everyday_thing" (homework, notes, an object, a place, a group plan), or "unclear" (the chat does not say yet). Use "not_applicable" for every other cue. A request is evidence only when the subject is "child".
+10. `assessment` must agree with your findings and with `conversation_reading`. If you read the conversation as ordinary, report no findings with modifier "none". If you report a serious finding, the assessment cannot be "harmless".
 
 CUES (one cue per finding, attached to one message id):
 Bullying:
@@ -49,13 +53,13 @@ MODIFIERS (set on each finding):
 RULES:
 1. Cite only message ids that appear in `messages`. Never invent ids, people or events.
 2. `target_id` is the person the message is aimed at. It must be a participant id from `conversation.participants`, never the sender, or null if the transcript does not establish who is targeted. In a group chat, identify who is being targeted from the content.
-3. Report findings for the focus messages. For earlier messages, report a finding only if it is missing from `prior_findings` or its interpretation has changed (for example the modifier). Do not repeat unchanged prior findings.
+3. Report findings for the focus messages. For earlier messages, report a finding only if it is missing from `prior_findings`, its interpretation has changed (for example the modifier), or it is a "pending" prior finding that later messages now support (HOW TO READ step 6). Do not repeat unchanged confirmed findings.
 4. Only flag a message whose meaning IN THIS CONVERSATION is hostile, controlling or concerning. Neutral questions, plans, thanks, replies and ordinary requests that follow from the topic are never findings.
 5. If friendly banter contains insult words, report the finding with modifier "banter" and add a `mutual_banter` pattern. Do not treat banter as harmful.
 6. Harmless secrecy (birthday surprise, gift, game) is not a grooming cue. Add a `harmless_secrecy` pattern instead.
 7. One-off rudeness is still evidence, but repeated targeting matters more: add `repeated_harassment`, `group_targeting` (several people against one) or `cross_chat_targeting` (continues from related_evidence) patterns with the supporting message ids.
 8. A sequence of rapport, then secrecy or isolation, then requests, then pressure is `grooming_progression`. Describe it as a potential safeguarding concern, never as a proven crime.
-9. If the evidence is insufficient or ambiguous, set assessment to "uncertain" and explain why in `uncertain_reason`.
+9. If the evidence is insufficient or ambiguous, set assessment to "uncertain" and explain why in `uncertain_reason`. "uncertain" means "not confirmed": nothing is acted on until a later reading confirms it, so prefer "uncertain" over guessing "concerning".
 10. assessment: "harmless" (nothing concerning), "concerning" (some warning signs), "harmful" (clear bullying or grooming risk), "uncertain".
 11. Keep rationales under 20 words. Keep `explanation` to at most 2 short sentences. Do not quote sexual or graphic content.
 12. confidence: "high" only when the message, read in context, clearly shows the cue; "medium" when likely; "low" when weak or when context leaves it open.
@@ -63,13 +67,17 @@ RULES:
 OUTPUT: a single JSON object matching the provided schema. No other text.
 
 EXAMPLE A (banter): messages m01 "riya you're such a loser 😂" (from Meera), m02 "says the one who tripped in PE lol, see you at practice?" (from Riya).
-→ conversation_reading "Two friends teasing each other and making plans for practice; m01 is a joke Riya returns in m02.", assessment "harmless", findings [{message_id "m01", context_basis "m02: Riya jokes back and makes plans", cue "insult_harassment", target_id "p-riya", modifier "banter", confidence "medium"}], patterns [{type "mutual_banter", message_ids ["m01","m02"]}].
+→ conversation_reading "Two friends teasing each other and making plans for practice; m01 is a joke Riya returns in m02.", assessment "harmless", findings [{message_id "m01", context_basis "m02: Riya jokes back and makes plans", requested_subject "not_applicable", cue "insult_harassment", target_id "p-riya", modifier "banter", confidence "medium"}], patterns [{type "mutual_banter", message_ids ["m01","m02"]}].
 
 EXAMPLE B (exclusion RoBERTa-style models miss): m04 "nobody wants you at our table, just sit somewhere else" sent to the child.
-→ findings [{message_id "m04", context_basis "no earlier context", cue "exclusion", target_id "<child id>", modifier "none", confidence "high"}].
+→ findings [{message_id "m04", context_basis "no earlier context", requested_subject "not_applicable", cue "exclusion", target_id "<child id>", modifier "none", confidence "high"}].
 
 EXAMPLE C (context makes a request ordinary): m01 "did u finish the science worksheet" (from Arjun), m02 "ya just now" (from the child), m03 "send a photo? i'm stuck on q4" (from Arjun, focus).
 → conversation_reading "Classmates talking about a worksheet; m03 asks for a photo of the child's finished worksheet.", assessment "harmless", findings [].
 
-EXAMPLE D (context makes a request concerning): an unknown contact earlier says the child seems much older than their age (m02) and asks them not to tell their parents about the chat (m04); focus m06 asks the child to send a picture of themselves.
-→ assessment "harmful", findings for m02 flattery_age, m04 secrecy, and m06 image_request (context_basis "m02, m04: flattery and secrecy from a new contact before the request", confidence "high"), patterns [{type "grooming_progression", message_ids ["m02","m04","m06"]}].
+EXAMPLE D (unfinished thought): after EXAMPLE C, Arjun sends m05 "not just that" (focus).
+→ conversation_reading "Classmates sharing worksheet photos; m05 says Arjun wants more than the worksheet, but not yet what.", assessment "uncertain", uncertain_reason "m05 is unfinished; what else he wants is not stated yet", findings [].
+If Arjun's next message is "yesterday's sheet too", the reading becomes harmless. If it asks for a picture of the child, report image_request with requested_subject "child".
+
+EXAMPLE E (context makes a request concerning): an unknown contact earlier says the child seems much older than their age (m02) and asks them not to tell their parents about the chat (m04); focus m06 asks the child to send a picture of themselves.
+→ assessment "harmful", findings for m02 flattery_age, m04 secrecy, and m06 image_request (context_basis "m02, m04: flattery and secrecy from a new contact before the request", requested_subject "child", confidence "high"), patterns [{type "grooming_progression", message_ids ["m02","m04","m06"]}].

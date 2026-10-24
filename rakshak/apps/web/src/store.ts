@@ -14,7 +14,7 @@ import { create } from 'zustand';
 import { BACKEND_META, CHILD, CUE_ACTIVE_P, WEEKDAYS } from './data/meta';
 import { PREVIEW_BY_LEVEL, SCENARIO as PREVIEW_SCRIPT } from './data/scenario';
 import { api, ApiError, rid, type ChatGPTStatus, type Checkpoint, type Health, type ScenarioView, type ServerState } from './lib/api';
-import { alertsToFire, analysisFor, nameMap, riskOf, type CaseInputs } from './lib/case';
+import { alertsToFire, alertsToWithdraw, analysisFor, nameMap, riskOf, WITHDRAW_REASON, type CaseInputs } from './lib/case';
 import { autoAnalyses, canCompose, caseKeyOf, HISTORY_IDLE, historyChunks, historyStatusOf, parsePrefs, unanalysedTails, type HistoryInit, type Prefs } from './lib/flow';
 import type { AlertItem, Analysis, Backend, ChatMessage, ConversationView, Level, Mode, Origin, ParticipantView, Side, Stage } from './types';
 
@@ -115,7 +115,7 @@ export type Action =
   | { type: 'setPerspective'; id: string }
   | { type: 'addConversation'; conversation: ConversationView; participants: ParticipantView[] }
   | { type: 'pending'; ids: string[]; on: boolean }
-  | { type: 'runApplied'; run: AnalysisResult; analyses: Record<string, Analysis>; evidence: EvidenceEvent[]; firstSeen: Record<string, number>; risk: RiskState; point: { day: number; score: number; level: Level }; fire: AlertItem[]; alerted: Record<string, number>; historical: boolean }
+  | { type: 'runApplied'; run: AnalysisResult; analyses: Record<string, Analysis>; evidence: EvidenceEvent[]; firstSeen: Record<string, number>; risk: RiskState; point: { day: number; score: number; level: Level }; fire: AlertItem[]; alerted: Record<string, number>; historical: boolean; withdrawn?: string[] }
   | { type: 'runError'; error: { code: string; message: string } | null; clear?: string[] }
   | { type: 'setRisk'; risk: RiskState; dismissalList?: DemoData['dismissalList']; blocks?: DemoData['blocks'] }
   | { type: 'env'; patch: Partial<Pick<DemoData, 'health' | 'serverOnline' | 'scenarios' | 'caption'>> }
@@ -376,6 +376,19 @@ export function reduce(s: DemoData, a: Action): DemoData {
         lastRun: a.run,
         runError: a.run.error && a.run.error.code !== 'stale' ? a.run.error : null,
       };
+      if (a.withdrawn?.length) {
+        // Retracted on a fuller reading: keep the alert in the guardian's history, marked withdrawn, and take it off screen.
+        const gone = new Set(a.withdrawn);
+        const off = (x: AlertItem | null) => (x && gone.has(x.id) ? null : x);
+        next = {
+          ...next,
+          alerts: next.alerts.map((al) => (gone.has(al.id) ? { ...al, withdrawn: true, withdrawnReason: WITHDRAW_REASON } : al)),
+          victimNudge: off(next.victimNudge),
+          guardianBanner: off(next.guardianBanner),
+          guardianSheet: off(next.guardianSheet),
+          critical: off(next.critical),
+        };
+      }
       // Historical findings are recorded and listed, but not pushed as a storm of pop-ups.
       if (a.historical) next = { ...next, alerts: [...next.alerts, ...a.fire] };
       else for (const al of a.fire) next = route(next, al);
@@ -578,6 +591,8 @@ function applyServerState(st: ServerState) {
       childName,
       historical: !!a.historical,
       evidenceKeys: (track?.cues ?? []).map((c) => c.evidenceKey),
+      withdrawn: !!a.withdrawn,
+      withdrawnReason: a.withdrawn ? a.withdrawnReason ?? WITHDRAW_REASON : undefined,
     };
   });
   const scenarioId = meta.scenarioId ?? st.scenarioId ?? null;
@@ -659,12 +674,17 @@ function applyRun(run: AnalysisResult, evidence: EvidenceEvent[], firstSeen: Rec
   const names = nameMap(d.participants);
   const childName = childNameOf(d);
   const caseKey = caseKeyFor(d);
-  const { items, next } = alertsToFire(risk, d.alerted, { day, time: lastFocus?.time ?? nowTime(), childName, names, runId: run.analysisId });
+  // Alerts whose evidence was retracted are withdrawn first, which re-arms their track for new confirmed evidence.
+  const withdrawn = historical ? [] : alertsToWithdraw(d.alerts, evidence, risk);
+  const alertedBase = { ...d.alerted };
+  for (const w of withdrawn) if (w.trackKey) delete alertedBase[w.trackKey];
+  const { items, next } = alertsToFire(risk, alertedBase, { day, time: lastFocus?.time ?? nowTime(), childName, names, runId: run.analysisId });
   const fire = items.map((a) => ({ ...a, caseKey, childName, historical, evidenceKeys: risk.tracks.find((t) => t.key === a.trackKey)?.cues.map((c) => c.evidenceKey) ?? [] }));
-  dispatch({ type: 'runApplied', run, analyses, evidence, firstSeen, risk, point: { day, score: risk.score, level: risk.level }, fire, alerted: next, historical });
+  dispatch({ type: 'runApplied', run, analyses, evidence, firstSeen, risk, point: { day, score: risk.score, level: risk.level }, fire, alerted: next, historical, withdrawn: withdrawn.map((w) => w.id) });
   // Persist the deterministic outputs next to the evidence (fire-and-forget; the server de-duplicates alerts).
   const b = apiBackend(d.backend);
   api.snapshot(d.childId, { backend: b, runId: run.analysisId, day, score: risk.score, level: risk.level, stage: risk.stage, category: risk.category, dominantTrack: risk.dominantTrack, trace: risk.trace, evidenceKeys: evidence.filter((e) => e.status === 'active' || e.status === 'needs_review').map((e) => e.key) }).catch(() => {});
+  for (const w of withdrawn) api.withdrawAlert(d.childId, w.id, { backend: b, reason: WITHDRAW_REASON }).catch(() => {});
   for (const a of fire) api.alert(d.childId, { id: a.id, backend: b, trackKey: a.trackKey, level: a.level, day: a.day, time: a.time, title: a.guardianTitle, body: a.guardianBody, historical }).catch(() => {});
 }
 
@@ -850,7 +870,7 @@ export async function initHistory() {
     dispatch({ type: 'historyInit', patch: { done } });
   }
   const after = get();
-  const baseline = { level: after.level, score: after.score, findings: after.evidence.filter((e) => e.status === 'active' || e.status === 'needs_review').length };
+  const baseline = { level: after.level, score: after.score, findings: after.evidence.filter((e) => e.status === 'active').length };
   dispatch({ type: 'historyInit', patch: { status: 'complete', done, total, error: null, baseline } });
 }
 

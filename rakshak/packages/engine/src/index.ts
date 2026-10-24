@@ -171,6 +171,12 @@ function scoreTrack(key: string, kind: CueCategory, contactId: string | null, ev
       trace.push(`${ev.cue}  p=${fmtP(ev.p)}  below threshold`);
       continue;
     }
+    // Pending (unconfirmed) evidence is recorded and shown, but takes no step: no score, no stage, no floor,
+    // no attribution. It counts only once the analysis confirms it (status "active").
+    if (ev.status === 'needs_review') {
+      trace.push(`${ev.cue}  p=${fmtP(ev.p)}  pending confirmation · not scored`);
+      continue;
+    }
     advance(ev.day);
 
     let factor = 1;
@@ -185,10 +191,6 @@ function scoreTrack(key: string, kind: CueCategory, contactId: string | null, ev
       } else {
         notes.push('banter reading ignored for this cue');
       }
-    }
-    if (ev.status === 'needs_review') {
-      factor *= cfg.reductions.needsReview;
-      notes.push(`×${cfg.reductions.needsReview} model disagreement`);
     }
     if (kind === 'grooming' && primed && cfg.grooming.sequenceRequests.includes(ev.cue)) {
       factor *= cfg.grooming.sequenceMultiplier;

@@ -1,0 +1,103 @@
+{
+  "child": {
+    "id": "p-meera",
+    "name": "Meera"
+  },
+  "participants": [
+    {
+      "id": "p-kabir",
+      "name": "Kabir",
+      "role": "contact"
+    }
+  ],
+  "conversations": [
+    {
+      "id": "e8-c",
+      "kind": "private",
+      "title": "Kabir",
+      "participants": [
+        "p-meera",
+        "p-kabir"
+      ]
+    }
+  ],
+  "id": "e8-unfinished-concerning",
+  "title": "Unfinished thought resolved into a request for the child's photo",
+  "messages": [
+    {
+      "conv": "e8-c",
+      "from": "p-kabir",
+      "day": 1,
+      "time": "10:29 PM",
+      "text": "hey"
+    },
+    {
+      "conv": "e8-c",
+      "from": "p-kabir",
+      "day": 1,
+      "time": "10:29 PM",
+      "text": "did u complete todays homework"
+    },
+    {
+      "conv": "e8-c",
+      "from": "p-meera",
+      "day": 1,
+      "time": "10:29 PM",
+      "text": "yes"
+    },
+    {
+      "conv": "e8-c",
+      "from": "p-kabir",
+      "day": 1,
+      "time": "10:29 PM",
+      "text": "can u send pics"
+    },
+    {
+      "conv": "e8-c",
+      "from": "p-meera",
+      "day": 1,
+      "time": "10:29 PM",
+      "text": "wait i will"
+    },
+    {
+      "conv": "e8-c",
+      "from": "p-kabir",
+      "day": 1,
+      "time": "10:29 PM",
+      "text": "not just that"
+    },
+    {
+      "conv": "e8-c",
+      "from": "p-kabir",
+      "day": 1,
+      "time": "10:29 PM",
+      "text": "a selfie of you too"
+    },
+    {
+      "conv": "e8-c",
+      "from": "p-kabir",
+      "day": 1,
+      "time": "10:29 PM",
+      "text": "dont tell your mom tho"
+    }
+  ],
+  "expect": {
+    "level": [
+      2,
+      3
+    ],
+    "categories": [
+      "grooming"
+    ],
+    "target": "p-meera",
+    "offenders": [
+      "p-kabir"
+    ],
+    "nonOffenders": [],
+    "mustNotAlert": false,
+    "requiredCues": [
+      "image_request"
+    ],
+    "notes": "Mirror of e7: the same opening resolves into a request for the child herself plus secrecy; must be confirmed and alert."
+  }
+}

@@ -105,7 +105,10 @@ class Pipeline:
         conv_ev = self.store.evidence(child_id, backend, conv.id)
         other_ev = [e for e in self.store.evidence(child_id, backend, statuses=("active", "needs_review")) if e.conversation_id != conv.id]
         all_by_id = {m.id: m for m in self.store.messages(child_id)}
-        ctx = build_context(child, conv, participants, history, focus_ids, conv_ev, other_ev, all_by_id, conv_titles, self.s.context_token_budget, self.s.related_evidence_limit)
+        ctx = build_context(
+            child, conv, participants, history, focus_ids, conv_ev, other_ev, all_by_id, conv_titles,
+            self.s.context_token_budget, self.s.related_evidence_limit, previous_reading=self.store.last_reading(conv.id, backend),
+        )
 
         warnings: list[str] = []
         if ctx.truncated:
@@ -156,10 +159,11 @@ class Pipeline:
 
         by_id = {m.id: m for m in history}
         prior_objectors = frozenset(e.sender_id for e in conv_ev if e.modifier == "counterspeech" and e.status != "superseded")
+        prior_flagged = frozenset((e.message_id, e.cue) for e in conv_ev if e.status in ("active", "needs_review") and e.modifier == "none")
         events, decisions = fuse(
             backend=backend, child_id=child_id, conv=conv, messages=by_id, focus_ids=focus_ids, roberta=roberta_scores,
             validated=validated, contextual_source=self.qwen.source if backend == "local_hybrid" else self.chatgpt.source,
-            roberta_threshold=self.s.roberta_threshold, run_id=run_id, prior_objectors=prior_objectors,
+            roberta_threshold=self.s.roberta_threshold, run_id=run_id, prior_objectors=prior_objectors, prior_flagged=prior_flagged,
         )
 
         # Apply only if nothing newer happened while the models were running.
@@ -174,6 +178,8 @@ class Pipeline:
                 new_keys = {e.key for e in events}
                 existing = self.store.evidence(child_id, backend, conv.id)
                 retract = {(m, c): r for m, c, r in validated.retractions}
+                harmless = validated.assessment == "harmless"
+                reflagged = {(f.message_id, f.cue) for f in validated.findings if f.modifier == "none"}
                 for e in existing:
                     if e.status == "superseded" or e.key in new_keys:
                         continue
@@ -182,6 +188,11 @@ class Pipeline:
                         superseded.append(e.key)
                     elif (e.message_id, e.cue) in retract:
                         self.store.set_evidence_status(e.key, "superseded", f"retracted: {retract[(e.message_id, e.cue)]}", run_id)
+                        superseded.append(e.key)
+                    elif harmless and e.modifier == "none" and (e.status == "needs_review" or (e.message_id, e.cue) in reflagged):
+                        # A harmless whole-chat reading clears unconfirmed findings, and retracts any the model re-read
+                        # in this run while still calling the whole chat harmless.
+                        self.store.set_evidence_status(e.key, "superseded", "cleared: the model's whole-chat reading is now harmless", run_id)
                         superseded.append(e.key)
             existing_by_key = {e.key: e for e in self.store.evidence(child_id, backend, conv.id)}
             for e in events:
@@ -232,6 +243,7 @@ class Pipeline:
                     "sender": name(m.sender_id),
                     "text": m.text,
                     "analyser_context_basis": f.context_basis,
+                    "analyser_requested_subject": f.requested_subject,
                 }
             )
         if not claims:

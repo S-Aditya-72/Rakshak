@@ -46,7 +46,6 @@
     "quoted": 0.3,
     "counterspeech": 0.3,
     "banter": 0.1,
-    "needsReview": 0.5,
     "dismissal": 0.5
   },
   "linkedContacts": { "windowDays": 1, "inheritScore": false }

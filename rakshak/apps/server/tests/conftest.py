@@ -90,8 +90,10 @@ def empty(assessment: str = "harmless") -> dict:
     return {"conversation_reading": "test reading", "assessment": assessment, "categories": [], "target_participant_id": None, "findings": [], "retractions": [], "patterns": [], "explanation": "", "uncertain_reason": None}
 
 
-def finding(alias: str, cue: str, target: Optional[str] = "p-meera", modifier: str = "none", confidence: str = "high") -> dict:
-    return {"message_id": alias, "context_basis": "test basis", "cue": cue, "target_id": target, "modifier": modifier, "confidence": confidence, "rationale": "test"}
+def finding(alias: str, cue: str, target: Optional[str] = "p-meera", modifier: str = "none", confidence: str = "high", subject: Optional[str] = None) -> dict:
+    if subject is None:
+        subject = "child" if cue in ("image_request", "meeting_request", "personal_info_request") else "not_applicable"
+    return {"message_id": alias, "context_basis": "test basis", "requested_subject": subject, "cue": cue, "target_id": target, "modifier": modifier, "confidence": confidence, "rationale": "test"}
 
 
 def alias_of(ctx: Context, text_part: str) -> str:

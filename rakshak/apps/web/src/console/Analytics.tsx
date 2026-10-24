@@ -35,7 +35,8 @@ export function CaseCard() {
   const risk = d.risk;
   const top = risk?.tracks[0];
   const preview = d.scenarioId === PREVIEW_ID;
-  const scored = d.evidence.filter((e) => (e.status === 'active' || e.status === 'needs_review') && e.senderId !== d.childId).length;
+  // Only confirmed evidence is scored; pending findings are recorded but take no step.
+  const scored = d.evidence.filter((e) => e.status === 'active' && e.senderId !== d.childId).length;
   const current = risk ? risk.score : preview && d.history.length ? decay(d.history[d.history.length - 1].score, d.simDay - d.history[d.history.length - 1].day) : 0;
   const level = (risk?.level ?? d.level) as Level;
 
@@ -266,7 +267,7 @@ const AGREE_LABEL: Record<string, string> = {
   agree: 'both models',
   contextual_only: 'context only',
   context_override: 'context override',
-  needs_review: 'models disagree',
+  needs_review: 'pending confirmation',
   single_model: 'single model',
 };
 

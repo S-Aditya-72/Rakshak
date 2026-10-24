@@ -12,7 +12,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
-from .contract import ASSESSMENTS, CONFIDENCES, CUES, MODIFIERS, PATTERN_TYPES, ModelFinding, PatternNote
+from .contract import ASSESSMENTS, CONFIDENCES, CUES, MODIFIERS, PATTERN_TYPES, REQUEST_CUES, REQUEST_SUBJECTS, ModelFinding, PatternNote
 from .context import Context
 
 
@@ -109,12 +109,23 @@ def validate(raw: dict, ctx: Context) -> Validated:
         confidence = f.get("confidence") if f.get("confidence") in CONFIDENCES else "low"
         if f.get("confidence") not in CONFIDENCES:
             w.append(f"findings[{i}]: confidence {f.get('confidence')!r} defaulted to low")
+        subject = f.get("requested_subject")
+        if cue in REQUEST_CUES:
+            if subject not in REQUEST_SUBJECTS or subject == "not_applicable":
+                w.append(f"findings[{i}]: {cue} without a resolved requested_subject; treated as unclear")
+                subject = "unclear"
+            if subject == "everyday_thing" and modifier == "none":
+                # The model itself resolved the request to something ordinary (homework, notes, an object): not a cue.
+                w.append(f"findings[{i}]: dropped {cue}: the model resolved the request to an everyday thing")
+                continue
+        else:
+            subject = None
         k = (m, cue, t)
         if k in seen:
             continue
         seen.add(k)
         basis = _s(f.get("context_basis"), 240) or None
-        findings.append(ModelFinding(message_id=m, cue=cue, target_id=t, modifier=modifier, confidence=confidence, rationale=_s(f.get("rationale"), 200), context_basis=basis))
+        findings.append(ModelFinding(message_id=m, cue=cue, target_id=t, modifier=modifier, confidence=confidence, rationale=_s(f.get("rationale"), 200), context_basis=basis, requested_subject=subject))
 
     retractions: list[tuple[str, str, str]] = []
     for i, r in enumerate(raw.get("retractions") or []):

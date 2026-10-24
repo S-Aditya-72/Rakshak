@@ -144,14 +144,22 @@ function Caption() {
     const a = last.analysis;
     level = a.level;
     key = `a-${last.id}-${a.level}`;
-    const cues = a.cues.filter((c) => c.p >= CUE_ACTIVE_P && (c.status === undefined || c.status === 'active' || c.status === 'needs_review')).map((c) => CUE_META[c.cue].label);
+    // Only confirmed cues are reported as detected; pending ones are shown as waiting, never as harm.
+    const cues = a.cues.filter((c) => c.p >= CUE_ACTIVE_P && (c.status === undefined || c.status === 'active')).map((c) => CUE_META[c.cue].label);
+    const waiting = a.cues.filter((c) => c.p >= CUE_ACTIVE_P && c.status === 'needs_review').map((c) => CUE_META[c.cue].label);
     content = (
       <>
         <b>
           Day {last.day} · {WEEKDAYS[last.day]}
         </b>
         <span className="cap-sep">·</span>
-        {cues.length ? `${[...new Set(cues)].join(' + ')} detected` : a.run?.assessment === 'uncertain' ? 'model uncertain' : 'no harmful cues on this message'}
+        {cues.length
+          ? `${[...new Set(cues)].join(' + ')} detected`
+          : waiting.length
+            ? `possible ${[...new Set(waiting)].join(' + ')} · waiting for confirmation`
+            : a.run?.assessment === 'uncertain'
+              ? 'model uncertain · waiting for more context'
+              : 'no harmful cues on this message'}
         <span className="cap-arrow">→</span>
         <span style={{ color: LEVEL_META[a.level].color }}>{outcome(a.level, childNameOf(d))}</span>
         {a.preview && <span className="cap-sep">· preview, not live AI</span>}

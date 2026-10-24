@@ -98,4 +98,23 @@ export function alertsToFire(risk: RiskState, alerted: Record<string, number>, c
   return { items, next };
 }
 
+export const WITHDRAW_REASON = 'Update: on reading the full conversation, the warning signs behind this alert were not confirmed. No action needed.';
+
+/** Which track an evidence row feeds (mirrors the engine: grooming per contact, bullying child-level). */
+export const trackOfEvidence = (e: EvidenceEvent) => (e.category === 'bullying' ? 'bullying' : `grooming:${e.senderId}`);
+
+/**
+ * Alerts to withdraw: none of their evidence is confirmed any more, at least one row was explicitly retracted
+ * (superseded, not merely aged out) and the track is now below the alert's level. Decay alone never withdraws.
+ */
+export function alertsToWithdraw(alerts: AlertItem[], evidence: EvidenceEvent[], risk: RiskState): AlertItem[] {
+  return alerts.filter((a) => {
+    if (a.preview || a.withdrawn || !a.trackKey) return false;
+    const keys = a.evidenceKeys?.length ? a.evidenceKeys : evidence.filter((e) => trackOfEvidence(e) === a.trackKey && e.modifier === 'none').map((e) => e.key);
+    const rows = evidence.filter((e) => keys.includes(e.key));
+    if (!rows.length || rows.some((e) => e.status === 'active') || !rows.some((e) => e.status === 'superseded')) return false;
+    return (risk.tracks.find((t) => t.key === a.trackKey)?.level ?? 0) < a.level;
+  });
+}
+
 export const levelOf = (n: number) => Math.max(0, Math.min(3, Math.round(n))) as Level;

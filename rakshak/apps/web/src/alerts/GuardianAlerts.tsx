@@ -79,7 +79,8 @@ export function NotificationCard({ alert }: { alert: AlertItem }) {
     <motion.button
       layout
       layoutId={`card-${alert.id}`}
-      className={`g-notif ${critical ? 'g-notif-critical' : ''} ${alert.historical ? 'g-notif-hist' : ''}`}
+      className={`g-notif ${critical && !alert.withdrawn ? 'g-notif-critical' : ''} ${alert.historical ? 'g-notif-hist' : ''}`}
+      style={alert.withdrawn ? { opacity: 0.72 } : undefined}
       initial={{ opacity: 0, y: 20, scale: 0.95 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       transition={{ type: 'spring', stiffness: 300, damping: 28 }}
@@ -93,11 +94,22 @@ export function NotificationCard({ alert }: { alert: AlertItem }) {
             Day {alert.day} · {alert.time}
           </span>
         </div>
-        <div className="g-notif-title" style={{ color: LEVEL_META[alert.level].color }}>
-          {critical ? 'Critical: ' : ''}
-          {alert.guardianTitle}
-        </div>
-        <div className="g-notif-body">{alert.guardianBody}</div>
+        {alert.withdrawn ? (
+          <>
+            <div className="g-notif-title">
+              Withdrawn: <s>{alert.guardianTitle}</s>
+            </div>
+            <div className="g-notif-body">{alert.withdrawnReason}</div>
+          </>
+        ) : (
+          <>
+            <div className="g-notif-title" style={{ color: LEVEL_META[alert.level].color }}>
+              {critical ? 'Critical: ' : ''}
+              {alert.guardianTitle}
+            </div>
+            <div className="g-notif-body">{alert.guardianBody}</div>
+          </>
+        )}
       </div>
     </motion.button>
   );

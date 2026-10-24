@@ -18,7 +18,7 @@ from fastapi.responses import JSONResponse
 
 from .analyzers import AnalyzerError, ChatGPTAnalyzer, QwenAnalyzer
 from .config import Settings, load_settings
-from .contract import AlertIn, AnalyzeRequest, BlockIn, DismissalIn, NewConversation, NewMessage, NewParticipant, Participant, SnapshotIn
+from .contract import AlertIn, AlertWithdrawIn, AnalyzeRequest, BlockIn, DismissalIn, NewConversation, NewMessage, NewParticipant, Participant, SnapshotIn
 from .db import DEFAULT_CHILD, Store, new_id
 from .pipeline import AnalysisRejected, Pipeline
 from .roberta import RobertaClassifier
@@ -154,6 +154,11 @@ def create_app(settings: Optional[Settings] = None, *, roberta: Optional[Roberta
     def add_alert(child_id: str, body: AlertIn):
         """Records an alert the engine decided to fire. Returns created=false if this level was already alerted."""
         return {"created": store.add_alert(child_of(child_id), body.model_dump())}
+
+    @app.post("/api/cases/{child_id}/alerts/{alert_id}/withdraw")
+    def withdraw_alert(child_id: str, alert_id: str, body: AlertWithdrawIn):
+        """The evidence behind an alert was retracted on a fuller reading of the chat: mark it withdrawn."""
+        return {"withdrawn": store.withdraw_alert(child_of(child_id), alert_id, body.backend, body.reason)}
 
     @app.post("/api/cases/{child_id}/dismissals")
     def add_dismissal(child_id: str, body: DismissalIn):

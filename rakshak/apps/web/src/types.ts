@@ -78,6 +78,9 @@ export interface AlertItem {
   historical?: boolean;
   /** Evidence rows behind the alert's track at the time it fired. */
   evidenceKeys?: string[];
+  /** The evidence behind this alert was retracted on a fuller reading of the chat. Shown as withdrawn, never deleted. */
+  withdrawn?: boolean;
+  withdrawnReason?: string;
 }
 
 export interface ParticipantView {

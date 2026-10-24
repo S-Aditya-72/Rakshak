@@ -482,9 +482,10 @@ def test_remention_does_not_erase_roberta_agreement(make_client):
     assert ev["agreement"] == "agree" and ev["status"] == "active" and set(ev["sources"]) == {"qwen", "roberta"}
 
 
-def test_harmless_assessment_flags_non_critical_medium_findings(make_client):
+def test_harmless_assessment_drops_contradicting_findings(make_client):
     c = make_client(qwen=FakeContextual("qwen", lambda ctx: {**empty("harmless"), "findings": [finding(alias_of(ctx, "secret"), "secrecy", confidence="medium")]}))
     load(c, "e1-birthday")
     mid = post_msg(c, "e1-c", "p-riya", "don't tell her anything!! it's a secret")
-    ev = analyze(c, "e1-c", mid).json()["evidence"][0]
-    assert ev["status"] == "needs_review"
+    out = analyze(c, "e1-c", mid).json()
+    assert out["evidence"] == []
+    assert out["result"]["fusion"][0]["status"] == "suppressed" and "whole-chat reading is harmless" in out["result"]["fusion"][0]["note"]

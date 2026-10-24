@@ -128,10 +128,16 @@ describe('scoring rules', () => {
     expect(req.score).toBeCloseTo(3, 5);
   });
 
-  it('needs-review evidence counts at half weight and cannot set floors', () => {
-    const r = computeRisk({ ...base, evidence: [ev('intimidation', 1, { status: 'needs_review' })], evalDay: 1 });
-    expect(r.score).toBeCloseTo(1.5, 5);
+  it('pending (needs-review) evidence is recorded but never scored, staged, floored or alerted on', () => {
+    const pending = [ev('image_request', 1, { status: 'needs_review' }), ev('threat_payment', 1, { status: 'needs_review' }), ev('intimidation', 1, { status: 'needs_review' })];
+    const r = computeRisk({ ...base, evidence: pending, evalDay: 1 });
+    expect(r.score).toBe(0);
     expect(r.level).toBe(0);
+    expect(r.tracks.every((t) => t.cues.length === 0 && t.floors.length === 0 && t.stage === 'rapport')).toBe(true);
+    expect(decideAlerts(r, {}).fire).toHaveLength(0);
+    // Once confirmed, the same evidence counts normally.
+    const confirmed = computeRisk({ ...base, evidence: [ev('image_request', 1)], evalDay: 1 });
+    expect(confirmed.score).toBeGreaterThan(0);
   });
 
   it('superseded and suppressed evidence is ignored', () => {
