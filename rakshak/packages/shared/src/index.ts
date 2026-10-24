@@ -163,6 +163,8 @@ export interface ModelFinding {
   modifier: Modifier;
   confidence: Confidence;
   rationale: string;
+  /** Earlier messages that shaped this reading, as the model stated them ("no earlier context" if none). */
+  contextBasis?: string | null;
   /** Verification pass result: supported | unclear | corroborated | known; absent when not run. */
   verification?: string | null;
 }
@@ -220,6 +222,8 @@ export interface AnalysisResult {
   findings: ModelFinding[];
   patterns: PatternNote[];
   explanation: string;
+  /** The model's reading of the whole conversation, written before any finding. */
+  conversationReading?: string;
   uncertainReason: string | null;
   roberta: RobertaScore[];
   fusion: FusionDecision[];

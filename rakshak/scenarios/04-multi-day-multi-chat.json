@@ -240,5 +240,28 @@
       "s4-c-class",
       "s4-c-arjun"
     ]
-  }
+  },
+  "intro": "Different classmates target Meera in a private chat, the class group and another private chat; Riya supports her. RAKSHAK never assumes two accounts are one person.",
+  "checkpoints": [
+    {
+      "id": "after-group",
+      "after": 12,
+      "label": "Day 3 · after the class group chat",
+      "intro": "Dev was unkind on Day 1 and the class group piled on today. Open any chat and continue.",
+      "suggestions": [
+        "sorry meera, that was too far",
+        "meera nobody wants you on the trip"
+      ]
+    },
+    {
+      "id": "riya-checks-in",
+      "after": 15,
+      "label": "Day 4 · Riya checks in",
+      "intro": "Riya is supporting Meera privately. Continue in any chat, for example Arjun in a new private chat.",
+      "suggestions": [
+        "thanks riya ❤️",
+        "everyone in 8B thinks you are a freak"
+      ]
+    }
+  ]
 }

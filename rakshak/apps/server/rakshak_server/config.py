@@ -30,7 +30,7 @@ class Settings:
     # Qwen3.5 via Ollama (contextual analyser)
     ollama_url: str = field(default_factory=lambda: _env("OLLAMA_URL", "http://127.0.0.1:11434"))
     qwen_model: str = field(default_factory=lambda: _env("QWEN_MODEL", "qwen3.5:4b"))
-    qwen_num_ctx: int = field(default_factory=lambda: int(_env("QWEN_NUM_CTX", "8192")))
+    qwen_num_ctx: int = field(default_factory=lambda: int(_env("QWEN_NUM_CTX", "16384")))
     qwen_num_predict: int = field(default_factory=lambda: int(_env("QWEN_NUM_PREDICT", "1200")))
     qwen_timeout_s: float = field(default_factory=lambda: float(_env("QWEN_TIMEOUT_S", "120")))
     qwen_keep_alive: str = field(default_factory=lambda: _env("QWEN_KEEP_ALIVE", "30m"))
@@ -44,8 +44,9 @@ class Settings:
     chatgpt_enabled: bool = field(default_factory=lambda: _env("CHATGPT_ENABLED", "1") == "1")
     chatgpt_timeout_s: float = field(default_factory=lambda: float(_env("CHATGPT_TIMEOUT_S", "180")))
 
-    # Context selection
-    context_token_budget: int = field(default_factory=lambda: int(_env("CONTEXT_TOKEN_BUDGET", "4200")))
+    # Context selection. The whole chat is sent; the budget only bites on very long chats (~30k characters).
+    # num_ctx must cover system prompt (~2.2k tokens) + this budget + num_predict.
+    context_token_budget: int = field(default_factory=lambda: int(_env("CONTEXT_TOKEN_BUDGET", "11000")))
     related_evidence_limit: int = field(default_factory=lambda: int(_env("RELATED_EVIDENCE_LIMIT", "12")))
 
     # Logging raw conversation text is off by default.

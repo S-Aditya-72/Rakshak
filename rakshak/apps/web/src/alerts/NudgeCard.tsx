@@ -24,11 +24,39 @@ const COPY: Record<1 | 2 | 3, Copy> = {
   },
   3: {
     title: "You're not alone in this",
-    body: `Don't pay and don't delete anything. This isn't your fault. ${GUARDIAN.name} has been alerted and help is on the way.`,
+    body: `Don't pay and don't delete anything. This isn't your fault. ${GUARDIAN.name} has been alerted.`,
     canDismiss: false,
     primary: `Call ${GUARDIAN.name}`,
   },
 };
+
+// Grooming L1/L2 copy names only what was actually detected (no "keeping it secret" unless secrecy was found).
+// Order = which behaviour leads the sentence when several were found.
+const ASKED: [string, string][] = [
+  ['threat_payment', 'threatening you or asking for money'],
+  ['image_request', 'asking for photos of you'],
+  ['meeting_request', 'asking to meet you'],
+  ['disable_protection', 'asking you to delete chats or turn off safety apps'],
+  ['secrecy', 'asking you to keep chats secret'],
+  ['personal_info_request', "asking where you are or when you're alone"],
+  ['platform_move', 'asking you to move to another app'],
+  ['isolation', 'trying to pull you away from family or friends'],
+  ['manipulation', 'making you feel you owe them'],
+  ['flattery_age', 'saying you seem older than you are'],
+];
+
+function groomingCopy(level: 1 | 2, cues: string[]): Copy {
+  const found = ASKED.filter(([c]) => cues.includes(c)).map(([, t]) => t).slice(0, 2);
+  const what = found.length ? found.join(' and ') : 'some of the messages in this chat';
+  const sign = `${what.charAt(0).toUpperCase()}${what.slice(1)} ${found.length ? 'is' : 'are'} a warning sign.`;
+  if (level === 1) return { ...COPY[1], body: `${sign} Want to talk to someone you trust?` };
+  const title = cues.includes('image_request')
+    ? "You don't have to send anything"
+    : cues.includes('meeting_request')
+      ? "You don't have to meet anyone"
+      : "You don't have to do anything that feels wrong";
+  return { ...COPY[2], title, body: `${sign} We've let ${GUARDIAN.name} know. You're not in trouble.` };
+}
 
 // Bullying cases get their own wording: supportive, never blaming, no stranger-danger framing.
 const BULLYING_COPY: Record<1 | 2 | 3, Copy> = {
@@ -60,11 +88,17 @@ export function NudgeCard() {
 function Card({ alert }: { alert: AlertItem }) {
   const dispatch = useDemo((s) => s.dispatch);
   const [done, setDone] = useState<string | null>(null);
-  const base = (alert.category === 'bullying' ? BULLYING_COPY : COPY)[alert.level];
+  const cues = alert.cues.map((c) => c.cue as string);
+  const base =
+    alert.category === 'bullying'
+      ? BULLYING_COPY[alert.level]
+      : alert.level === 3
+        ? COPY[3]
+        : groomingCopy(alert.level, cues);
   // "Don't pay" only when a payment or threat was actually detected; otherwise the generic critical wording.
   const copy =
     alert.level === 3 && alert.category !== 'bullying' && !alert.cues.some((c) => c.cue === 'threat_payment')
-      ? { ...base, body: `This isn't your fault. Please don't delete anything. ${GUARDIAN.name} has been alerted and help is on the way.` }
+      ? { ...base, body: `This isn't your fault. Please don't delete anything. ${GUARDIAN.name} has been alerted.` }
       : base;
 
   useEffect(() => {
@@ -106,14 +140,14 @@ function Card({ alert }: { alert: AlertItem }) {
               <div className="nudge-title">{copy.title}</div>
               <div className="nudge-text">{copy.body}</div>
               <div className="nudge-actions">
-                <button className="nudge-btn primary" onClick={() => setDone(`Okay. We've let ${GUARDIAN.name} know you'd like to talk.`)}>
+                <button className="nudge-btn primary" onClick={() => setDone(`Okay. In this demo, ${GUARDIAN.name}'s screen shows that you'd like to talk.`)}>
                   {copy.primary}
                 </button>
                 <button
                   className="nudge-btn"
                   onClick={() => {
                     blockActiveContact();
-                    setDone('Contact blocked (demo). You did the right thing.');
+                    setDone('Block recorded in this simulator only (no real account is blocked). You did the right thing.');
                   }}
                 >
                   Block

@@ -202,8 +202,9 @@ class Pipeline:
         return self._finish(req, run_id, child_id, conv, ctx, history, focus_ids, validated, roberta_scores, events, decisions, superseded, error, warnings, t0, roberta_ms, contextual_ms, contextual_model, meta, status=status)
 
     async def _verify(self, validated: Validated, ctx, conv_ev, roberta_scores, participants, warnings: list[str]) -> Optional[float]:
-        """Re-check new, uncorroborated findings with a narrow per-claim question. Drops unsupported claims."""
+        """Re-check new, uncorroborated findings against the whole transcript. Drops unsupported claims."""
         known = {(e.message_id, e.cue) for e in conv_ev if e.status in ("active", "needs_review")}
+        name = lambda pid: participants[pid].display_name if pid in participants else pid  # noqa: E731
         by_id = {m.id: m for m in ctx.messages}
         claims, index = [], {}
         for f in validated.findings:
@@ -219,8 +220,6 @@ class Pipeline:
             m = by_id.get(f.message_id)
             if not m:
                 continue
-            pos = ctx.messages.index(m)
-            name = lambda pid: participants[pid].display_name if pid in participants else pid  # noqa: E731
             cid = f"c{len(claims) + 1}"
             index[cid] = f
             claims.append(
@@ -229,14 +228,18 @@ class Pipeline:
                     "cue": f.cue,
                     "definition": CUE_DEFINITIONS[f.cue],
                     "claimed_target": name(f.target_id) if f.target_id else None,
-                    "message": {"sender": name(m.sender_id), "text": m.text},
-                    "preceding": [{"sender": name(x.sender_id), "text": x.text} for x in ctx.messages[max(0, pos - 3) : pos]],
+                    "message_id": ctx.id_to_alias[m.id],
+                    "sender": name(m.sender_id),
+                    "text": m.text,
+                    "analyser_context_basis": f.context_basis,
                 }
             )
         if not claims:
             return None
+        # The verifier sees the same whole chat the analyser saw, so it can judge each claim in context.
+        transcript = [{"id": ctx.id_to_alias[x.id], "sender": name(x.sender_id), "day": x.day, "text": x.text} for x in ctx.messages]
         try:
-            verdicts, ms = await self.qwen.verify(claims)
+            verdicts, ms = await self.qwen.verify(claims, transcript)
         except AnalyzerError as e:
             warnings.append(f"{e.message}; findings kept unverified")
             return None
@@ -273,6 +276,7 @@ class Pipeline:
             findings=validated.findings if validated else [],
             patterns=validated.patterns if validated else [],
             explanation=validated.explanation if validated else "",
+            conversation_reading=validated.reading if validated else "",
             uncertain_reason=(validated.uncertain_reason if validated else (error.message if error else None)),
             roberta=list(roberta_scores.values()),
             fusion=decisions,

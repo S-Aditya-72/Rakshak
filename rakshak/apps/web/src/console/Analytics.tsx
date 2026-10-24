@@ -1,6 +1,6 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import { Activity, AlertTriangle, BrainCircuit, Cloud, Cpu, Database, Eye, Link2, ScrollText, Users } from 'lucide-react';
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { CueChip, NeonBadge, ScoreRing, StageStepper } from '../alerts/primitives';
 import { BACKEND_META, HALF_LIFE_DAYS, LEVEL_META, SCORE_MAX, THRESHOLDS } from '../data/meta';
 import { trackLabel } from '../lib/case';
@@ -8,6 +8,14 @@ import { PREVIEW_ID, useDemo } from '../store';
 import type { Level } from '../types';
 
 const decay = (score: number, days: number) => score * Math.pow(0.5, days / HALF_LIFE_DAYS);
+
+/** Ask the engine drawer to show one evidence row (trace → evidence inspection). */
+export const EVIDENCE_EVENT = 'rakshak:evidence';
+let lastEvidence: string | null = null;
+export function showEvidence(key: string) {
+  lastEvidence = key; // the evidence tab may mount after the event fires
+  window.dispatchEvent(new CustomEvent(EVIDENCE_EVENT, { detail: key }));
+}
 
 function useNames() {
   const participants = useDemo((s) => s.data.participants);
@@ -268,8 +276,11 @@ export function DebugFeed() {
   const pending = useDemo((s) => s.data.pending);
   const backend = useDemo((s) => s.data.backend);
   const childId = useDemo((s) => s.data.childId);
+  const evidence = useDemo((s) => s.data.evidence);
+  const runError = useDemo((s) => s.data.runError);
   const names = useNames();
   const ref = useRef<HTMLDivElement>(null);
+  const keyOf = (messageId: string, cue: string) => evidence.find((e) => e.messageId === messageId && e.cue === cue)?.key;
 
   const mounted = useRef(false);
   useEffect(() => {
@@ -325,7 +336,7 @@ export function DebugFeed() {
 
                 {pending.includes(m.id) && (
                   <div className="analyzing">
-                    <span className="shimmer">{backend === 'gpt' ? 'ChatGPT (cloud) analysing the conversation…' : 'RoBERTa + Qwen3.5 analysing locally…'}</span>
+                    <span className="shimmer">message saved · analysing conversation {backend === 'gpt' ? 'with ChatGPT (cloud)' : 'locally (RoBERTa + Qwen3.5)'}…</span>
                   </div>
                 )}
 
@@ -334,7 +345,15 @@ export function DebugFeed() {
                     {a.cues.length > 0 && (
                       <div className="feed-cues">
                         {a.cues.map((c) => (
-                          <span key={`${c.cue}-${c.targetId ?? ''}`} className="cue-wrap" title={c.agreement ? AGREE_LABEL[c.agreement] : undefined}>
+                          <span
+                            key={`${c.cue}-${c.targetId ?? ''}`}
+                            className={`cue-wrap ${keyOf(m.id, c.cue) ? 'cue-link' : ''}`}
+                            title={keyOf(m.id, c.cue) ? 'Show this evidence in case memory' : c.agreement ? AGREE_LABEL[c.agreement] : undefined}
+                            onClick={() => {
+                              const k = keyOf(m.id, c.cue);
+                              if (k) showEvidence(k);
+                            }}
+                          >
                             <CueChip cue={c.cue} p={c.p} status={c.status} />
                             {c.modifier && c.modifier !== 'none' && <span className="cue-mod">{c.modifier}</span>}
                             {c.agreement && <span className={`cue-agree ag-${c.agreement}`}>{AGREE_LABEL[c.agreement]}</span>}
@@ -351,7 +370,19 @@ export function DebugFeed() {
                     </div>
                   </motion.div>
                 ) : (
-                  !pending.includes(m.id) && <div className="feed-clean">{isChild ? 'child message · used as context' : backend === 'gpt' ? 'not analysed yet · owner action required' : 'not analysed'}</div>
+                  !pending.includes(m.id) && (
+                    <div className="feed-clean">
+                      {a === undefined && m.id.startsWith('preview-')
+                        ? 'preview message'
+                        : backend === 'gpt'
+                          ? 'message saved · not analysed · owner action required'
+                          : runError
+                            ? 'message saved · analysis failed or did not run (see the caption)'
+                            : isChild
+                              ? 'message saved · will be assessed in the next analysis of this chat'
+                              : 'message saved · not analysed yet'}
+                    </div>
+                  )
                 )}
               </motion.div>
             );
@@ -376,6 +407,15 @@ export function EvidencePanel() {
     return [...g.entries()];
   }, [evidence]);
   const other = new Set(risk?.otherTargets.map((o) => o.evidenceKey));
+  const [focus, setFocus] = useState<string | null>(lastEvidence);
+  useEffect(() => {
+    const on = (e: Event) => setFocus((e as CustomEvent<string>).detail);
+    window.addEventListener(EVIDENCE_EVENT, on);
+    return () => window.removeEventListener(EVIDENCE_EVENT, on);
+  }, []);
+  useEffect(() => {
+    if (focus) document.getElementById(`ev-${focus}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, [focus]);
 
   return (
     <section className="panel panel-feed">
@@ -391,7 +431,7 @@ export function EvidencePanel() {
           <div key={conv} className="ev-group">
             <div className="ev-conv">{names.chat[conv] ?? conv}</div>
             {list.map((e) => (
-              <div key={e.key} className={`ev-row ev-${e.status}`}>
+              <div key={e.key} id={`ev-${e.key}`} className={`ev-row ev-${e.status} ${focus === e.key ? 'ev-focus' : ''}`}>
                 <div className="ev-top">
                   <CueChip cue={e.cue} p={e.p} status={e.status} />
                   <span className="ev-who">
@@ -409,6 +449,7 @@ export function EvidencePanel() {
                 </div>
                 {text[e.messageId] && <div className="ev-text">“{text[e.messageId]}”</div>}
                 {e.rationale && <div className="ev-why">{e.rationale}</div>}
+                <div className="ev-key">{e.key} · message {e.messageId} · run {e.runId}</div>
               </div>
             ))}
           </div>
@@ -494,6 +535,12 @@ export function ModelsPanel() {
               <span>Target</span>
               <span>{run.targetParticipantId ? names.person[run.targetParticipantId] ?? run.targetParticipantId : 'not established'}</span>
             </div>
+            {run.conversationReading && (
+              <>
+                <div className="mdl-k">Whole-chat reading (written before any finding)</div>
+                <div className="mdl-expl">{run.conversationReading}</div>
+              </>
+            )}
             {run.explanation && <div className="mdl-expl">{run.explanation}</div>}
             {run.uncertainReason && <div className="mdl-unc">Uncertain: {run.uncertainReason}</div>}
 
@@ -514,6 +561,7 @@ export function ModelsPanel() {
                 <CueChip cue={f.cue} /> {f.modifier !== 'none' && <span className="cue-mod">{f.modifier}</span>} <span className="feed-time">{f.confidence}{f.verification ? ` · ${f.verification}` : ''}</span> {label(f.messageId)}
                 {f.targetId && <span className="feed-time"> → {names.person[f.targetId] ?? f.targetId}</span>}
                 {f.rationale && <div className="ev-why">{f.rationale}</div>}
+                {f.contextBasis && <div className="ev-why">Context: {f.contextBasis}</div>}
               </div>
             ))}
             {run.patterns.length > 0 && (

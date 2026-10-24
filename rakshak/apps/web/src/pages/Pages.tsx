@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import { ChevronLeft, ShieldCheck } from 'lucide-react';
+import { GetHelp } from '../alerts/GetHelp';
 import { GuardianPhone } from '../alerts/GuardianPhone';
 import { NudgeCard } from '../alerts/NudgeCard';
 import { ChatScreen } from '../chat/ChatScreen';
@@ -36,6 +37,7 @@ export function ConsolePage() {
           <ModelsPanel />
         </aside>
       </main>
+      <GetHelp />
     </div>
   );
 }

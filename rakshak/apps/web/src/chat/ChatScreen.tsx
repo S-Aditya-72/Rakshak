@@ -1,7 +1,8 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import { ArrowUp, Check, ChevronDown, ChevronLeft, ChevronRight, Mic, Plus, SquarePen, Users, Video, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { createConversation, openConversation, sendLive, useDemo } from '../store';
+import { canCompose } from '../lib/flow';
+import { childNameOf, createConversation, openConversation, sendLive, useDemo } from '../store';
 import type { ChatMessage, ConversationView, ParticipantView, Side } from '../types';
 import { StatusBar } from './PhoneFrame';
 
@@ -180,11 +181,13 @@ function MessageRow({
 
 function Composer({ side, conv, people, childId }: { side: Side; conv: ConversationView | null; people: Record<string, ParticipantView>; childId: string }) {
   const mode = useDemo((s) => s.data.mode);
+  const composable = useDemo((s) => canCompose(s.data.mode, s.data.origin, s.data.historyInit));
+  const settingUp = useDemo((s) => s.data.historyInit.status === 'loading' || s.data.historyInit.status === 'analyzing');
   const perspective = useDemo((s) => s.data.perspective);
   const dispatch = useDemo((s) => s.dispatch);
   const [text, setText] = useState('');
   const [picker, setPicker] = useState(false);
-  const live = mode === 'B' && !!conv;
+  const live = composable && !!conv;
   const others = conv ? conv.participantIds.filter((p) => p !== childId) : [];
   const showPicker = side === 'predator' && others.length > 1;
 
@@ -216,7 +219,7 @@ function Composer({ side, conv, people, childId }: { side: Side; conv: Conversat
         )}
       </AnimatePresence>
       {showPicker ? (
-        <button className="glass sender-pill" onClick={() => setPicker((v) => !v)} aria-label="Choose who is typing" disabled={mode !== 'B'}>
+        <button className="glass sender-pill" onClick={() => setPicker((v) => !v)} aria-label="Choose who is typing" disabled={!composable}>
           {people[perspective ?? '']?.displayName ?? 'Sender'} <ChevronDown size={13} />
         </button>
       ) : (
@@ -230,7 +233,7 @@ function Composer({ side, conv, people, childId }: { side: Side; conv: Conversat
           disabled={!live}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && send()}
-          placeholder={live ? 'iMessage' : mode === 'B' ? 'Open a chat…' : 'AI simulation running…'}
+          placeholder={live ? 'iMessage' : settingUp ? 'Setting up history…' : composable ? 'Open a chat…' : mode === 'A' ? 'AI simulation running…' : 'Use the Studio panel to start'}
         />
         <AnimatePresence mode="wait" initial={false}>
           {text.trim() ? (
@@ -264,7 +267,7 @@ function Inbox({ side, me, onClose }: { side: Side; me: string | null; onClose: 
   const participants = useDemo((s) => s.data.participants);
   const childId = useDemo((s) => s.data.childId);
   const active = useDemo((s) => s.data.activeConv);
-  const mode = useDemo((s) => s.data.mode);
+  const composable = useDemo((s) => canCompose(s.data.mode, s.data.origin, s.data.historyInit));
   const [composing, setComposing] = useState(false);
   const people = Object.fromEntries(participants.map((p) => [p.id, p]));
   // The contact phone only lists chats its current sender is in; the child sees all of the child's chats.
@@ -276,7 +279,7 @@ function Inbox({ side, me, onClose }: { side: Side; me: string | null; onClose: 
         <button className="inbox-link" onClick={onClose}>
           <ChevronLeft size={18} /> Back
         </button>
-        {mode === 'B' && side === 'victim' && (
+        {composable && side === 'victim' && (
           <button className="inbox-link" onClick={() => setComposing(true)} aria-label="New chat">
             <SquarePen size={18} />
           </button>
@@ -317,6 +320,7 @@ function Inbox({ side, me, onClose }: { side: Side; me: string | null; onClose: 
 
 function NewChat({ onDone, onCancel }: { onDone: () => void; onCancel: () => void }) {
   const participants = useDemo((s) => s.data.participants);
+  const childName = useDemo((s) => childNameOf(s.data));
   const childId = useDemo((s) => s.data.childId);
   const [kind, setKind] = useState<'private' | 'group'>('private');
   const [title, setTitle] = useState('');
@@ -365,7 +369,7 @@ function NewChat({ onDone, onCancel }: { onDone: () => void; onCancel: () => voi
           ))}
         </div>
         {kind === 'group' && <input className="newchat-input" placeholder="Group name" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={40} />}
-        <div className="newchat-k">People already in Meera's chats</div>
+        <div className="newchat-k">People already in {childName}'s chats</div>
         <div className="newchat-people">
           {known.length === 0 && <span className="inbox-empty">None yet</span>}
           {known.map((p) => (

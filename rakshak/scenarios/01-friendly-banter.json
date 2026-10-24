@@ -2,8 +2,8 @@
   "id": "s1-banter",
   "number": 1,
   "title": "Friendly banter",
-  "subtitle": "Two friends trade jokes and insults",
-  "tests": "False-positive handling: insult words between friends should not alert",
+  "subtitle": "Two friends trade jokes, then one sets a boundary",
+  "tests": "False-positive handling: insult words between friends should not alert; a boundary is set and respected",
   "child": {
     "id": "p-meera",
     "name": "Meera"
@@ -88,13 +88,34 @@
       "from": "p-riya",
       "day": 2,
       "time": "7:31 PM",
-      "text": "rude!!! ok fair 😂 movie on saturday?"
+      "text": "rude!!! ok fair 😂 night night clown 🤡"
     },
     {
       "conv": "s1-c-riya",
       "from": "p-meera",
       "day": 2,
-      "time": "7:32 PM",
+      "time": "7:33 PM",
+      "text": "ok the clown thing was funny but i'm kinda done with it now. can you drop it?"
+    },
+    {
+      "conv": "s1-c-riya",
+      "from": "p-riya",
+      "day": 2,
+      "time": "7:34 PM",
+      "text": "oh ok, fair! no more clown, promise 🤝"
+    },
+    {
+      "conv": "s1-c-riya",
+      "from": "p-meera",
+      "day": 2,
+      "time": "7:34 PM",
+      "text": "thank youuu ❤️ movie on saturday?"
+    },
+    {
+      "conv": "s1-c-riya",
+      "from": "p-riya",
+      "day": 2,
+      "time": "7:35 PM",
       "text": "yesss 🍿"
     }
   ],
@@ -111,5 +132,28 @@
     ],
     "mustNotAlert": true,
     "notes": "RoBERTa is expected to flag some messages; context should override them."
-  }
+  },
+  "intro": "Meera and her friend Riya tease each other constantly. On Day 2 Meera asks Riya to drop a nickname.",
+  "checkpoints": [
+    {
+      "id": "boundary",
+      "after": 10,
+      "label": "Day 2 · Meera has just set a boundary",
+      "intro": "Meera asked Riya to stop calling her \"clown\". Continue as Riya: respect it, or ignore it.",
+      "suggestions": [
+        "oh ok, fair! sorry 🙏 see you tomorrow",
+        "lol no, clown forever 🤡 i told the whole class to call you that"
+      ]
+    },
+    {
+      "id": "end",
+      "after": 13,
+      "label": "Day 2 · end of the script",
+      "intro": "The boundary was respected. Continue with anything, harmless or not.",
+      "suggestions": [
+        "can't wait for saturday!!",
+        "actually the whole class thinks you are a clown"
+      ]
+    }
+  ]
 }

@@ -2,9 +2,8 @@ import { AnimatePresence, LayoutGroup, motion } from 'framer-motion';
 import { ShieldCheck } from 'lucide-react';
 import { useEffect } from 'react';
 import { PhoneFrame, StatusBar } from '../chat/PhoneFrame';
-import { CHILD } from '../data/meta';
 import { playChime, playCritical } from '../lib/sounds';
-import { useDemo } from '../store';
+import { childNameOf, useDemo } from '../store';
 import { AlertSheet, CriticalTakeover, GuardianBanner, NotificationCard } from './GuardianAlerts';
 
 /** The guardian's phone: lock screen + alert history + L2 banner / sheet + L3 takeover. */
@@ -14,6 +13,7 @@ export function GuardianPhone() {
   const sheet = useDemo((s) => s.data.guardianSheet);
   const critical = useDemo((s) => s.data.critical);
   const sound = useDemo((s) => s.data.sound);
+  const child = useDemo((s) => childNameOf(s.data));
 
   useEffect(() => {
     if (banner && sound) playChime();
@@ -46,8 +46,8 @@ export function GuardianPhone() {
                   <div className="lock-empty-icon">
                     <ShieldCheck size={22} strokeWidth={2.2} />
                   </div>
-                  <div className="lock-empty-title">RAKSHAK is protecting {CHILD.name}</div>
-                  <div className="lock-empty-sub">No alerts. Level 1 nudges stay private to {CHILD.name}.</div>
+                  <div className="lock-empty-title">RAKSHAK is watching over {child}</div>
+                  <div className="lock-empty-sub">No alerts. Level 1 nudges stay private to {child}. Simulated guardian view.</div>
                 </motion.div>
               )}
             </AnimatePresence>

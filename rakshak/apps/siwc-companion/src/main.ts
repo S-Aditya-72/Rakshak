@@ -22,7 +22,7 @@ import { createOsCredentialEncryption } from './os-encryption.ts';
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 const DATA = resolve(process.env.RAKSHAK_DATA_DIR ?? join(ROOT, 'data'));
 const PORT = Number(process.env.RAKSHAK_COMPANION_PORT ?? 8788);
-const PROMPT_FILE = join(ROOT, 'prompts', 'analysis_system.v1.md');
+const PROMPT_FILE = join(ROOT, 'prompts', 'analysis_system.v2.md');
 const MAX_BODY = 400_000;
 
 mkdirSync(join(DATA, 'siwc'), { recursive: true });

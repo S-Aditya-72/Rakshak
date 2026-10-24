@@ -31,6 +31,7 @@ class Validated:
     explanation: str
     uncertain_reason: Optional[str]
     warnings: list[str] = field(default_factory=list)
+    reading: str = ""
 
 
 def parse_json(text: str) -> dict:
@@ -112,7 +113,8 @@ def validate(raw: dict, ctx: Context) -> Validated:
         if k in seen:
             continue
         seen.add(k)
-        findings.append(ModelFinding(message_id=m, cue=cue, target_id=t, modifier=modifier, confidence=confidence, rationale=_s(f.get("rationale"), 200)))
+        basis = _s(f.get("context_basis"), 240) or None
+        findings.append(ModelFinding(message_id=m, cue=cue, target_id=t, modifier=modifier, confidence=confidence, rationale=_s(f.get("rationale"), 200), context_basis=basis))
 
     retractions: list[tuple[str, str, str]] = []
     for i, r in enumerate(raw.get("retractions") or []):
@@ -129,6 +131,12 @@ def validate(raw: dict, ctx: Context) -> Validated:
         ids = [x for x in (mid(v, f"patterns[{i}]") for v in (p.get("message_ids") or [])) if x]
         patterns.append(PatternNote(type=p["type"], message_ids=ids, summary=_s(p.get("summary"), 240)))
 
+    reading = _s(raw.get("conversation_reading"), 600)
+    if not reading:
+        w.append("model gave no conversation_reading; findings were not anchored to a whole-chat reading")
+    if assessment == "harmless" and any(f.modifier == "none" for f in findings):
+        w.append("assessment 'harmless' contradicts serious findings; those findings go to review")
+
     categories = [c for c in (raw.get("categories") or []) if c in ("bullying", "grooming", "banter", "none")]
     ur = raw.get("uncertain_reason")
     return Validated(
@@ -141,4 +149,5 @@ def validate(raw: dict, ctx: Context) -> Validated:
         explanation=_s(raw.get("explanation"), 400),
         uncertain_reason=_s(ur, 300) if isinstance(ur, str) and ur.strip() else None,
         warnings=w,
+        reading=reading,
     )

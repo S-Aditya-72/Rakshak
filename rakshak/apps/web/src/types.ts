@@ -3,7 +3,10 @@
 import type { AnalysisResult, CueId } from '@rakshak/shared';
 
 export type Side = 'predator' | 'victim';
-export type Mode = 'A' | 'B';
+/** A = Guided Demo (scripted playback), B = Continue the Conversation (preloaded history), C = Free Chat (fresh). */
+export type Mode = 'A' | 'B' | 'C';
+/** How the current case started. Distinct from the selected mode: switching modes never changes the case. */
+export type Origin = 'scripted' | 'history' | 'fresh' | 'preview';
 /** UI backend keys: 'inhouse' = RAKSHAK Hybrid (local), 'gpt' = ChatGPT (cloud, Sign in with ChatGPT). */
 export type Backend = 'gpt' | 'inhouse';
 export type Level = 0 | 1 | 2 | 3;
@@ -67,6 +70,14 @@ export interface AlertItem {
   preview?: boolean;
   category?: Category;
   trackKey?: string;
+  /** Case this alert was raised in (child id + case generation). Guardian views never fall back to another case. */
+  caseKey?: string;
+  /** Protected child's display name when the alert was raised. */
+  childName?: string;
+  /** Raised while earlier history was being analysed: listed, not pushed as a pop-up. */
+  historical?: boolean;
+  /** Evidence rows behind the alert's track at the time it fired. */
+  evidenceKeys?: string[];
 }
 
 export interface ParticipantView {

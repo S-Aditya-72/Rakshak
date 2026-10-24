@@ -2,7 +2,9 @@
 // inference service. Plays a test case or sends unscripted Mode B messages, then reports state + console errors.
 //
 //   node scripts/e2e-browser.mjs scenario s2-bullying [outDir]
-//   node scripts/e2e-browser.mjs live "message one" "message two" ...
+//   node scripts/e2e-browser.mjs live "message one" "message two" ...          (Mode C: fresh conversation)
+//   node scripts/e2e-browser.mjs history s1-banter boundary "child:msg" "msg"  (Mode B: history checkpoint, then live)
+//   E2E_HELP=1 also opens Get help → evidence review on the newest L2/L3 alert and checks the redacted report.
 //
 // Requires: web dev server on :5280 (npm run dev) and apps/server on :8787. Uses the dev-only window.__rakshak hook.
 import { spawn } from 'node:child_process';
@@ -63,16 +65,16 @@ const evaluate = async (expression) => {
 
 await send('Runtime.enable');
 await send('Page.enable');
-const mode = cmd === 'live' ? 'B' : 'A';
+const mode = cmd === 'live' ? 'C' : cmd === 'history' ? 'B' : 'A';
 await send('Page.navigate', { url: `${BASE}/#/sim?mode=${mode}` });
 for (let i = 0; i < 80 && !(await evaluate('!!window.__rakshak').catch(() => false)); i++) await sleep(250);
 await sleep(2500);
 
 const summary = `(() => { const d = window.__rakshak.useDemo.getState().data; return {
-  mode: d.mode, backend: d.backend, scenarioId: d.scenarioId, serverOnline: d.serverOnline, cursor: d.cursor,
+  mode: d.mode, origin: d.origin, checkpoint: d.checkpoint, historyInit: d.historyInit, backend: d.backend, scenarioId: d.scenarioId, serverOnline: d.serverOnline, cursor: d.cursor,
   level: d.level, score: Number(d.score.toFixed(2)), category: d.risk?.category ?? null, dominant: d.risk?.dominantTrack ?? null,
   tracks: (d.risk?.tracks ?? []).map(t => ({ key: t.key, level: t.level, score: Number(t.score.toFixed(2)), senders: t.senders, chats: t.conversations })),
-  alerts: d.alerts.map(a => ({ level: a.level, title: a.guardianTitle, category: a.category, preview: !!a.preview })),
+  alerts: d.alerts.map(a => ({ level: a.level, title: a.guardianTitle, category: a.category, preview: !!a.preview, historical: !!a.historical })),
   evidence: d.evidence.filter(e => e.status === 'active' || e.status === 'needs_review').length,
   analysed: d.messages.filter(m => m.analysis).length, messages: d.messages.filter(m => m.kind === 'msg').length,
   pending: d.pending.length, runError: d.runError, conversations: d.conversations.length,
@@ -89,6 +91,12 @@ if (cmd === 'scenario') {
   while (Date.now() - t0 < 15 * 60_000) {
     await sleep(1500);
     const s = await evaluate(`(() => { const d = window.__rakshak.useDemo.getState().data; return { playing: d.playing, cursor: d.cursor, len: window.__rakshak.scriptLength() } })()`);
+    // E2E_STOP_AT=n: pause after n scripted messages (then "Continue live from here", see below).
+    if (process.env.E2E_STOP_AT && s.cursor >= Number(process.env.E2E_STOP_AT)) {
+      await evaluate('window.__rakshak.pause(), true');
+      for (let i = 0; i < 120 && (await evaluate('window.__rakshak.useDemo.getState().data.pending.length')) > 0; i++) await sleep(500);
+      break;
+    }
     if (!s.playing && s.cursor >= s.len) break;
     if (!s.playing && s.cursor < s.len) {
       problems.push(`player stopped early at ${s.cursor}/${s.len}`);
@@ -97,7 +105,49 @@ if (cmd === 'scenario') {
   }
   await sleep(1500);
   result = await evaluate(summary);
+  if (process.env.E2E_STOP_AT) {
+    // Mode A → B: keep the played case and continue it live with the given messages (E2E_LIVE='["child:..","..."]').
+    const before = { messages: result.messages, evidence: result.evidence, level: result.level };
+    await evaluate('window.__rakshak.continueLiveFromHere()');
+    for (let i = 0; i < 240 && (await evaluate('window.__rakshak.useDemo.getState().data.historyInit.status')) === 'analyzing'; i++) await sleep(500);
+    const after = await evaluate(summary);
+    for (const raw of JSON.parse(process.env.E2E_LIVE ?? '[]')) {
+      const child = raw.startsWith('child:');
+      await evaluate(`window.__rakshak.sendLive(${JSON.stringify(child ? 'victim' : 'predator')}, ${JSON.stringify(child ? raw.slice(6) : raw)})`);
+      await sleep(300);
+      for (let i = 0; i < 400 && (await evaluate('window.__rakshak.useDemo.getState().data.pending.length')) > 0; i++) await sleep(500);
+    }
+    const live = await evaluate(summary);
+    result.continueLive = { before, afterContinue: { mode: after.mode, origin: after.origin, checkpoint: after.checkpoint, messages: after.messages, evidence: after.evidence, level: after.level, historyInit: after.historyInit }, afterLive: live };
+    if (after.messages !== before.messages || after.origin !== 'history' || after.mode !== 'B') problems.push('continue live changed the played case or did not switch to B');
+  }
+} else if (cmd === 'history') {
+  const [id = 's2-bullying', checkpoint, ...msgs] = rest;
+  await evaluate(`window.__rakshak.loadHistory(${JSON.stringify(id)}, ${JSON.stringify(checkpoint ? { checkpoint } : {})}), true`);
+  const t0 = Date.now();
+  let h;
+  while (Date.now() - t0 < 10 * 60_000) {
+    await sleep(1000);
+    h = await evaluate('window.__rakshak.useDemo.getState().data.historyInit');
+    if (!['loading', 'analyzing', 'idle'].includes(h.status)) break;
+  }
+  if (h?.status !== 'complete' && h?.status !== 'messages_only') problems.push(`history setup ended as ${h?.status}: ${h?.error ?? ''}`);
+  const baseline = await evaluate(summary);
+  for (const raw of msgs) {
+    const child = raw.startsWith('child:');
+    const text = child ? raw.slice(6) : raw;
+    await evaluate(`window.__rakshak.sendLive(${JSON.stringify(child ? 'victim' : 'predator')}, ${JSON.stringify(text)})`);
+    await sleep(300);
+    for (let i = 0; i < 400; i++) {
+      await sleep(500);
+      if ((await evaluate('window.__rakshak.useDemo.getState().data.pending.length')) === 0) break;
+    }
+  }
+  result = await evaluate(summary);
+  result.baseline = { level: baseline.level, score: baseline.score, evidence: baseline.evidence, alerts: baseline.alerts, historyInit: baseline.historyInit, messages: baseline.messages };
 } else if (cmd === 'live') {
+  await evaluate('window.__rakshak.startFreshConversation()');
+  await sleep(1000);
   for (const text of rest) {
     await evaluate(`window.__rakshak.sendLive('predator', ${JSON.stringify(text)})`);
     for (let i = 0; i < 240; i++) {
@@ -136,6 +186,31 @@ const capture = async (suffix) => {
   shots.push(file);
 };
 await capture('');
+if (process.env.E2E_HELP) {
+  // Guardian help → evidence review on the newest L2/L3 alert of this case; checks the reviewed (redacted) report.
+  const opened = await evaluate(`(() => { const s = window.__rakshak.useDemo.getState(); const a = [...s.data.alerts].reverse().find((x) => x.level >= 2 && !x.preview); if (!a) return false; s.dispatch({ type: 'openHelp', alert: a, tab: 'evidence' }); return a.childName; })()`);
+  if (!opened) problems.push('no L2/L3 alert to open Get help on');
+  else {
+    await sleep(800);
+    await evaluate(`[...document.querySelectorAll('.help button')].find((b) => b.textContent.includes('Open evidence review'))?.click(), true`);
+    await sleep(1200);
+    const html = await evaluate(`document.querySelector('.help-preview')?.getAttribute('srcdoc') ?? ''`);
+    result.report = {
+      bytes: html.length,
+      notSubmitted: html.includes('Not submitted'),
+      synthetic: html.includes('SYNTHETIC'),
+      childNameLeaked: new RegExp(`\\b${opened}\\b`, 'i').test(html),
+      rawScriptTag: /<script/i.test(html),
+      rows: (html.match(/<tr><td>E\d+/g) ?? []).length,
+    };
+    if (!result.report.notSubmitted || result.report.childNameLeaked || result.report.rawScriptTag || !result.report.rows) problems.push(`report check failed: ${JSON.stringify(result.report)}`);
+    await capture('-help-evidence');
+    await evaluate(`(() => { const s = window.__rakshak.useDemo.getState(); s.dispatch({ type: 'openHelp', alert: s.data.helpFor, tab: 'support' }); })()`);
+    await sleep(700);
+    await capture('-help-support');
+    await evaluate(`window.__rakshak.useDemo.getState().dispatch({ type: 'closeHelp' })`);
+  }
+}
 if (tabs.length) {
   await evaluate(`(() => { const d = window.__rakshak.useDemo.getState(); d.dispatch({ type: 'closeCritical' }); d.dispatch({ type: 'closeNudge' }); d.dispatch({ type: 'closeBanner' }); })()`);
   await evaluate(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'e' })), true`);

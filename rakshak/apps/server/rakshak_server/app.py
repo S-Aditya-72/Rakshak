@@ -22,7 +22,7 @@ from .contract import AlertIn, AnalyzeRequest, BlockIn, DismissalIn, NewConversa
 from .db import DEFAULT_CHILD, Store, new_id
 from .pipeline import AnalysisRejected, Pipeline
 from .roberta import RobertaClassifier
-from .scenarios import list_scenarios, load_scenario
+from .scenarios import list_scenarios, load_history, load_scenario
 
 log = logging.getLogger("rakshak")
 
@@ -99,6 +99,7 @@ def create_app(settings: Optional[Settings] = None, *, roberta: Optional[Roberta
             "blocks": store.blocks(cid),
             "firstSeen": store.first_seen(cid),
             "scenarioId": store.scenario_id(cid),
+            "case": store.case_meta(cid),
         }
 
     @app.post("/api/participants")
@@ -178,11 +179,40 @@ def create_app(settings: Optional[Settings] = None, *, roberta: Optional[Roberta
         except KeyError:
             raise HTTPException(404, "unknown scenario")
 
+    @app.post("/api/scenarios/{scenario_id}/history")
+    def scenario_history(scenario_id: str, checkpoint: Optional[str] = None, force: bool = False, upto: Optional[int] = None):
+        """Mode B: save an earlier conversation up to a checkpoint (messages only, no analysis), idempotently."""
+        try:
+            out = load_history(store, s.scenarios_dir, scenario_id, checkpoint, force, upto)
+        except KeyError:
+            raise HTTPException(404, "unknown scenario or checkpoint")
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+        if not out["reused"]:
+            pipe.latest_requested.clear()
+        return out
+
+    @app.post("/api/case/continue")
+    def case_continue(childId: Optional[str] = None):
+        """Turn a scripted playback case into a live one at its current point, keeping all memory.
+
+        Only messages that playback already saved exist on the server, so nothing after this point can reach a model.
+        """
+        cid = child_of(childId)
+        meta = store.case_meta(cid)
+        if meta["origin"] not in ("scripted", "history"):
+            raise HTTPException(409, "only a scripted or history case can be continued")
+        n = len(store.messages(cid))
+        if n == 0:
+            raise HTTPException(400, "nothing has been played yet")
+        store.set_origin(cid, "history", n)
+        return store.case_meta(cid)
+
     @app.post("/api/reset")
     def reset(childId: Optional[str] = None, mode: str = "live"):
-        """Clears the synthetic case and its memory. mode=live seeds the default Mode B contact."""
+        """Clears the synthetic case and its memory. mode=live seeds the default Free Chat contact."""
         cid = childId or DEFAULT_CHILD["id"]
-        store.reset_child(cid)
+        store.reset_child(cid, origin="fresh" if mode == "live" else None)
         pipe.latest_requested.clear()
         if mode == "live":
             store.upsert_participant(cid, Participant(id="p-kabir", display_name="Kabir", role="contact"))

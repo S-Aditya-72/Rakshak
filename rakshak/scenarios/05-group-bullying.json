@@ -127,7 +127,7 @@
       "from": "p-riya",
       "day": 2,
       "time": "5:35 PM",
-      "text": "guys stop, this isn't funny. she's part of the team"
+      "text": "\"your best is trash\"?? seriously sana. guys stop, she's part of the team"
     },
     {
       "conv": "s5-c-squad",
@@ -158,5 +158,28 @@
     "requiredCues": [
       "exclusion"
     ]
-  }
+  },
+  "intro": "A five-person football group chat: ordinary teasing on Day 1, then three members turn on Meera and Riya defends her.",
+  "checkpoints": [
+    {
+      "id": "pile-on",
+      "after": 9,
+      "label": "Day 2 · three members have joined in",
+      "intro": "Arjun, Sana and Kiran are targeting Meera. Continue as anyone in the group, including Riya or Meera.",
+      "suggestions": [
+        "guys stop, that is not ok",
+        "meera just leave the group already"
+      ]
+    },
+    {
+      "id": "defended",
+      "after": 12,
+      "label": "Day 2 · Riya has defended Meera",
+      "intro": "Riya quoted the abuse and objected. Continue as anyone.",
+      "suggestions": [
+        "ok sorry meera, we went too far",
+        "whatever riya. meera just leave the group"
+      ]
+    }
+  ]
 }

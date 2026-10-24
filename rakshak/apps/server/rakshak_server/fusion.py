@@ -10,6 +10,9 @@ Rules (see README "Fusion"):
 - One evidence event per (backend, conversation, message, cue, target): both models feed the same row,
   so the same harm is never counted twice.
 - RoBERTa never produces grooming cues.
+- The whole-chat reading is authoritative: a finding the model's own conversation-level assessment contradicts
+  ("harmless", or "uncertain" without high confidence) is kept but goes to needs_review, for every cue. It cannot
+  trigger floors on its own, so one word read out of context never raises an alert.
 """
 
 from __future__ import annotations
@@ -19,9 +22,6 @@ from typing import Optional
 from .contract import CONFIDENCE_P, CUE_CATEGORY, Conversation, EvidenceEvent, FusionDecision, Message, RobertaScore
 from .db import evidence_key
 from .validation import Validated
-
-# Serious cues are never downgraded by a "harmless" reading or by banter.
-CRITICAL_CUES = frozenset({"threat_payment", "intimidation", "image_request", "meeting_request", "disable_protection"})
 
 
 def objectors(validated: Optional[Validated], messages: dict[str, Message]) -> set[str]:
@@ -125,16 +125,14 @@ def fuse(
                 status, agreement = "needs_review", "needs_review"
                 note += "; verification pass unclear"
             elif (
-                validated.assessment == "harmless"
-                and modifier == "none"
-                and f.cue not in CRITICAL_CUES
-                and f.confidence != "high"
+                modifier == "none"
                 and agreement != "agree"
                 and "target objected" not in mutual_note  # the objection is concrete evidence; it outweighs "harmless"
+                and (validated.assessment == "harmless" or (validated.assessment == "uncertain" and f.confidence != "high"))
             ):
-                # The model's own verdict on the conversation contradicts this finding: keep it, flag it.
+                # The model's own reading of the whole conversation does not support this finding: keep it, flag it.
                 status, agreement = "needs_review", "needs_review"
-                note += "; contradicts the model's harmless assessment"
+                note += f"; contradicts the model's whole-chat assessment ({validated.assessment})"
             put(
                 EvidenceEvent(
                     key=evidence_key(backend, conv.id, m.id, f.cue, target),

@@ -46,7 +46,10 @@ export function analysisFor(messageId: string, run: AnalysisResult, evidence: Ev
   }
   const notes = run.fusion.filter((f) => f.messageId === messageId).map((f) => `fusion · ${f.cue}: ${f.agreement.replace('_', ' ')} — ${f.note}`);
   const rob = run.roberta.find((r) => r.messageId === messageId);
+  const cs = run.contextStats;
   const trace = [
+    // What the contextual model was actually given (reported by the server). Inclusion does not prove the model relied on every message.
+    `context  ${cs.messages} message${cs.messages === 1 ? '' : 's'} from this chat (~${cs.approxTokens} tokens)${cs.truncated ? ', older plain messages omitted to fit the budget' : ''}${cs.relatedEvidence ? ` + ${cs.relatedEvidence} finding${cs.relatedEvidence === 1 ? '' : 's'} from other chats` : ''} · ${run.focusMessageIds.length} new message${run.focusMessageIds.length === 1 ? '' : 's'} assessed`,
     ...(rob ? [`RoBERTa  bullying=${rob.bullying.toFixed(2)}  (${rob.predicted.replace('_', '-')}, ${rob.latencyMs} ms)`] : []),
     ...(run.models.contextual ? [`${run.backend === 'local_hybrid' ? 'Qwen' : 'ChatGPT'}  ${run.assessment}${run.latency.contextualMs ? ` (${Math.round(run.latency.contextualMs)} ms)` : ''}`] : []),
     ...notes,

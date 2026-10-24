@@ -116,5 +116,28 @@
       "exclusion",
       "intimidation"
     ]
-  }
+  },
+  "intro": "Dev, a classmate, starts with one rude comment and keeps going over four days, even after Meera asks him to stop.",
+  "checkpoints": [
+    {
+      "id": "one-rude",
+      "after": 3,
+      "label": "Day 1 · one rude exchange",
+      "intro": "So far this is a single rude exchange, not yet a pattern. Continue as Dev or Meera.",
+      "suggestions": [
+        "sorry, that was mean of me",
+        "nobody wants you around, just disappear"
+      ]
+    },
+    {
+      "id": "asked-to-stop",
+      "after": 8,
+      "label": "Day 3 · Meera has asked Dev to stop",
+      "intro": "Meera asked Dev to stop after two days of targeting. Continue as Dev: stop, or keep going.",
+      "suggestions": [
+        "ok fine. sorry",
+        "cry about it. you're such a loser"
+      ]
+    }
+  ]
 }

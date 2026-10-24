@@ -2,18 +2,26 @@
 // Every change is an Action run through `reduce`, and actions are mirrored to other tabs over BroadcastChannel,
 // so /predator, /victim and /console can live in separate windows and stay in sync.
 // Async work (server calls, model runs) happens only in the tab that started it; its results arrive as actions.
+//
+// Modes vs cases: `mode` is only what the presenter is looking at (A Guided Demo, B Continue the Conversation,
+// C Free Chat). The case itself (people, chats, messages, evidence) lives on the server and has an `origin`
+// (scripted, history, fresh, preview). Switching modes never changes or erases the case; replacing it is always an
+// explicit action (pick a scenario, load a history, start a new conversation, reset).
 
 import type { RiskState } from '@rakshak/engine';
 import type { AnalysisResult, EvidenceEvent } from '@rakshak/shared';
 import { create } from 'zustand';
 import { BACKEND_META, CHILD, CUE_ACTIVE_P, WEEKDAYS } from './data/meta';
 import { PREVIEW_BY_LEVEL, SCENARIO as PREVIEW_SCRIPT } from './data/scenario';
-import { api, ApiError, rid, type ChatGPTStatus, type Health, type ScenarioView, type ServerState } from './lib/api';
+import { api, ApiError, rid, type ChatGPTStatus, type Checkpoint, type Health, type ScenarioView, type ServerState } from './lib/api';
 import { alertsToFire, analysisFor, nameMap, riskOf, type CaseInputs } from './lib/case';
-import type { AlertItem, Analysis, Backend, ChatMessage, ConversationView, Level, Mode, ParticipantView, Side, Stage } from './types';
+import { autoAnalyses, canCompose, caseKeyOf, HISTORY_IDLE, historyChunks, historyStatusOf, parsePrefs, unanalysedTails, type HistoryInit, type Prefs } from './lib/flow';
+import type { AlertItem, Analysis, Backend, ChatMessage, ConversationView, Level, Mode, Origin, ParticipantView, Side, Stage } from './types';
 
 /** Id of the offline presentation preview (precomputed analyses, clearly labelled, never presented as live AI). */
 export const PREVIEW_ID = 'preview-scripted';
+
+export type HelpTab = 'understand' | 'support' | 'evidence' | 'complaint';
 
 export interface DemoData {
   mode: Mode;
@@ -37,6 +45,17 @@ export interface DemoData {
   guardianSheet: AlertItem | null;
   critical: AlertItem | null;
   reportOpen: boolean;
+  /** Alert whose "Get help" workflow is open (always tied to the alert's own case). */
+  helpFor: AlertItem | null;
+  helpTab: HelpTab;
+
+  // ---- the case ----
+  origin: Origin | null;
+  /** History cases: how many messages were preloaded (the live conversation starts after this many). */
+  checkpoint: number | null;
+  /** Server case generation; with childId it identifies this case (alerts carry it). */
+  generation: number;
+  historyInit: HistoryInit;
 
   // ---- real case memory ----
   childId: string;
@@ -86,18 +105,41 @@ export type Action =
   | { type: 'closeCritical' }
   | { type: 'openReport' }
   | { type: 'closeReport' }
+  | { type: 'openHelp'; alert: AlertItem; tab?: HelpTab }
+  | { type: 'closeHelp' }
   | { type: 'snapshot'; data: DemoData }
   // real case memory
   | { type: 'hydrate'; state: Partial<DemoData> }
+  | { type: 'historyInit'; patch: Partial<HistoryInit> }
   | { type: 'setActiveConv'; id: string; perspective?: string | null }
   | { type: 'setPerspective'; id: string }
   | { type: 'addConversation'; conversation: ConversationView; participants: ParticipantView[] }
   | { type: 'pending'; ids: string[]; on: boolean }
-  | { type: 'runApplied'; run: AnalysisResult; analyses: Record<string, Analysis>; evidence: EvidenceEvent[]; firstSeen: Record<string, number>; risk: RiskState; point: { day: number; score: number; level: Level }; fire: AlertItem[]; alerted: Record<string, number> }
+  | { type: 'runApplied'; run: AnalysisResult; analyses: Record<string, Analysis>; evidence: EvidenceEvent[]; firstSeen: Record<string, number>; risk: RiskState; point: { day: number; score: number; level: Level }; fire: AlertItem[]; alerted: Record<string, number>; historical: boolean }
   | { type: 'runError'; error: { code: string; message: string } | null; clear?: string[] }
   | { type: 'setRisk'; risk: RiskState; dismissalList?: DemoData['dismissalList']; blocks?: DemoData['blocks'] }
   | { type: 'env'; patch: Partial<Pick<DemoData, 'health' | 'serverOnline' | 'scenarios' | 'caption'>> }
   | { type: 'chatgpt'; patch: Partial<DemoData['chatgpt']> };
+
+// ---------- persisted UI preferences (the case itself is persisted on the server) ----------
+
+const PREFS_KEY = 'rakshak-ui-v1';
+
+function loadPrefs(): Prefs {
+  try {
+    return typeof localStorage === 'undefined' ? {} : parsePrefs(localStorage.getItem(PREFS_KEY));
+  } catch {
+    return {};
+  }
+}
+
+function savePrefs(d: DemoData) {
+  try {
+    if (typeof localStorage !== 'undefined') localStorage.setItem(PREFS_KEY, JSON.stringify({ mode: d.mode, backend: d.backend, sound: d.sound, speed: d.speed }));
+  } catch {
+    /* storage unavailable: preferences simply are not remembered */
+  }
+}
 
 function initial(keep?: Partial<DemoData>): DemoData {
   return {
@@ -128,6 +170,12 @@ function initial(keep?: Partial<DemoData>): DemoData {
     guardianSheet: null,
     critical: null,
     reportOpen: false,
+    helpFor: null,
+    helpTab: 'understand',
+    origin: null,
+    checkpoint: null,
+    generation: 0,
+    historyInit: HISTORY_IDLE,
     childId: CHILD.id,
     participants: [{ id: CHILD.id, displayName: CHILD.name, role: 'protected_child' }],
     conversations: [],
@@ -158,6 +206,10 @@ const KEEP = (s: DemoData): Partial<DemoData> => ({
   chatgpt: s.chatgpt,
 });
 
+/** Display name of the protected child in this case. */
+export const childNameOf = (d: Pick<DemoData, 'participants' | 'childId'>) => d.participants.find((p) => p.id === d.childId)?.displayName ?? CHILD.name;
+export const caseKeyFor = (d: Pick<DemoData, 'childId' | 'generation' | 'origin'>) => (d.origin === 'preview' ? 'preview' : caseKeyOf(d.childId, d.generation));
+
 /** Legacy alert builder, used only by the presentation preview and the "Preview L1/L2/L3" buttons. */
 function buildPreviewAlert(id: string, a: Analysis, day: number, time: string, messages: ChatMessage[], preview = false): AlertItem {
   const cues = messages
@@ -176,6 +228,8 @@ function buildPreviewAlert(id: string, a: Analysis, day: number, time: string, m
     cues,
     preview,
     category: 'grooming',
+    caseKey: 'preview',
+    childName: CHILD.name,
   };
 }
 
@@ -199,12 +253,13 @@ function withDayRow(messages: ChatMessage[], m: ChatMessage): ChatMessage[] {
   return [...messages, m];
 }
 
-function reduce(s: DemoData, a: Action): DemoData {
+export function reduce(s: DemoData, a: Action): DemoData {
   switch (a.type) {
     case 'reset':
       return initial(KEEP(s));
     case 'setMode':
-      return initial({ ...KEEP(s), mode: a.mode, scenarioId: a.mode === 'A' ? s.scenarioId : null });
+      // Navigation only: the case, its messages and its alerts are untouched.
+      return { ...s, mode: a.mode };
     case 'setBackend':
       return { ...s, backend: a.backend, runError: null };
     case 'setSound':
@@ -272,11 +327,17 @@ function reduce(s: DemoData, a: Action): DemoData {
       return { ...s, reportOpen: true };
     case 'closeReport':
       return { ...s, reportOpen: false };
+    case 'openHelp':
+      return { ...s, helpFor: a.alert, helpTab: a.tab ?? 'understand', guardianSheet: null, critical: null, reportOpen: false };
+    case 'closeHelp':
+      return { ...s, helpFor: null };
     case 'snapshot':
       return a.data;
 
     case 'hydrate':
       return { ...s, ...a.state };
+    case 'historyInit':
+      return { ...s, historyInit: { ...s.historyInit, ...a.patch } };
     case 'setActiveConv':
       return { ...s, activeConv: a.id, perspective: a.perspective !== undefined ? a.perspective : defaultPerspective(s, a.id) };
     case 'setPerspective':
@@ -315,7 +376,9 @@ function reduce(s: DemoData, a: Action): DemoData {
         lastRun: a.run,
         runError: a.run.error && a.run.error.code !== 'stale' ? a.run.error : null,
       };
-      for (const al of a.fire) next = route(next, al);
+      // Historical findings are recorded and listed, but not pushed as a storm of pop-ups.
+      if (a.historical) next = { ...next, alerts: [...next.alerts, ...a.fire] };
+      else for (const al of a.fire) next = route(next, al);
       return next;
     }
     case 'runError': {
@@ -358,29 +421,32 @@ interface Store {
 }
 
 export const useDemo = create<Store>((set) => ({
-  data: initial(),
+  data: initial(loadPrefs()),
   dispatch: (a) => {
     set((st) => ({ data: reduce(st.data, a) }));
-    channel?.postMessage({ from: tabId, action: a });
+    if (a.type === 'setMode' || a.type === 'setBackend' || a.type === 'setSound' || a.type === 'setSpeed') savePrefs(useDemo.getState().data);
+    channel?.postMessage({ v: SYNC_VERSION, from: tabId, action: a });
   },
 }));
 
-type Wire = { from: string; action?: Action; hello?: boolean; snapshot?: DemoData };
+/** Bumped whenever DemoData changes shape: tabs running an older build are ignored instead of crashing this one. */
+const SYNC_VERSION = 2;
+type Wire = { v?: number; from: string; action?: Action; hello?: boolean; snapshot?: DemoData };
 
 if (channel) {
   channel.onmessage = (e: MessageEvent<Wire>) => {
     const msg = e.data;
-    if (msg.from === tabId) return;
+    if (msg.from === tabId || msg.v !== SYNC_VERSION) return;
     if (msg.hello) {
       const data = useDemo.getState().data;
-      if (data.messages.length || data.alerts.length || data.conversations.length) channel.postMessage({ from: tabId, snapshot: data });
+      if (data.messages.length || data.alerts.length || data.conversations.length) channel.postMessage({ v: SYNC_VERSION, from: tabId, snapshot: data });
     } else if (msg.snapshot) {
-      if (useDemo.getState().data.messages.length === 0) useDemo.setState({ data: msg.snapshot });
+      if (useDemo.getState().data.messages.length === 0) useDemo.setState({ data: { ...initial(), ...msg.snapshot } });
     } else if (msg.action) {
       useDemo.setState((st) => ({ data: reduce(st.data, msg.action!) }));
     }
   };
-  channel.postMessage({ from: tabId, hello: true });
+  channel.postMessage({ v: SYNC_VERSION, from: tabId, hello: true });
 }
 
 // ---------- helpers ----------
@@ -390,9 +456,13 @@ const get = () => useDemo.getState().data;
 const uid = () => Math.random().toString(36).slice(2, 10);
 const apiBackend = (b: Backend) => BACKEND_META[b].api;
 let runToken = 0;
-/** Bumped on every reset / scenario load / mode or backend switch: older in-flight results are discarded. */
+/** Bumped whenever the case is replaced (reset, scenario/history load, new conversation) or the backend switches. */
 let caseEpoch = 0;
 let inflight = new AbortController();
+/** Bumped to stop a running history initialisation (cancel, or another case replaced it). */
+let initToken = 0;
+/** scenario@checkpoint of the history load in progress, so a double click does not start a second one. */
+let historyLoadKey: string | null = null;
 
 const wait = (ms: number) => new Promise<void>((r) => setTimeout(r, ms / get().speed));
 const typingMs = (text: string) => Math.min(2200, Math.max(700, 450 + text.length * 26));
@@ -408,8 +478,13 @@ function sideOf(senderId: string): Side {
 
 function bumpEpoch() {
   caseEpoch++;
+  initToken++;
   inflight.abort();
   inflight = new AbortController();
+}
+
+function errOf(e: unknown) {
+  return e instanceof ApiError ? { code: e.code, message: e.message } : { code: 'internal', message: String(e) };
 }
 
 // ---------- server bootstrap / hydration ----------
@@ -426,6 +501,7 @@ export async function refreshHealth() {
   }
 }
 
+/** First load / refresh: restore whatever case the server holds, in whatever mode was last selected. Never resets. */
 export async function bootstrap() {
   const health = await refreshHealth();
   if (!health) return;
@@ -435,23 +511,16 @@ export async function bootstrap() {
   } catch {
     /* listed later */
   }
-  const d = get();
-  if (d.mode === 'B') await hydrateFromServer(true);
-  else if (d.scenarioId && d.scenarioId !== PREVIEW_ID && d.messages.length === 0) await hydrateFromServer(false);
+  if (get().origin !== 'preview' && get().messages.length === 0) await hydrateFromServer();
 }
 
-/** Load the persisted case (conversations, messages, evidence, history) for the active backend. */
-export async function hydrateFromServer(seedLive: boolean) {
+/** Load the persisted case (conversations, messages, evidence, history, origin) for the active backend. */
+export async function hydrateFromServer() {
   const epoch = caseEpoch;
   let st: ServerState;
   try {
     st = await api.state(apiBackend(get().backend));
-    // Mode B owns its own live case. Memory left behind by a Mode A test case is replaced, not mixed in.
-    if (seedLive && (st.conversations.length === 0 || st.scenarioId)) {
-      await api.reset('live');
-      st = await api.state(apiBackend(get().backend));
-    }
-  } catch (e) {
+  } catch {
     dispatch({ type: 'env', patch: { serverOnline: false } });
     return;
   }
@@ -464,6 +533,10 @@ function applyServerState(st: ServerState) {
   const participants: ParticipantView[] = st.participants.map((p) => ({ id: p.id, displayName: p.displayName, role: p.role }));
   const conversations: ConversationView[] = st.conversations.map((c) => ({ id: c.id, kind: c.kind, title: c.title, participantIds: c.participantIds }));
   const backend = d.backend;
+  const meta = st.case ?? { generation: 0, scenarioId: st.scenarioId, origin: null, checkpoint: null };
+  const origin: Origin | null = meta.origin ?? (st.scenarioId ? 'scripted' : st.messages.length || st.conversations.length ? 'fresh' : null);
+  const caseKey = caseKeyOf(st.child.id, meta.generation);
+  const childName = st.child.displayName;
   // Rebuild per-message analyses from the persisted runs (latest run that judged each message wins).
   const runFor = new Map<string, AnalysisResult>();
   for (const r of st.runs) if (!r.stale) for (const id of r.focusMessageIds) runFor.set(id, r as AnalysisResult);
@@ -486,20 +559,28 @@ function applyServerState(st: ServerState) {
   }
   const lastMsg = st.messages[st.messages.length - 1];
   const activeConv = d.activeConv && conversations.some((c) => c.id === d.activeConv) ? d.activeConv : lastMsg?.conversationId ?? conversations[0]?.id ?? null;
-  const alerts: AlertItem[] = st.alerts.map((a) => ({
-    id: a.id,
-    level: a.level as 1 | 2 | 3,
-    day: a.day,
-    time: a.time,
-    stage: risk.stage,
-    score: risk.score,
-    contact: a.trackKey,
-    guardianTitle: a.title,
-    guardianBody: a.body,
-    cues: (risk.tracks.find((t) => t.key === a.trackKey)?.cues ?? []).map((c) => ({ cue: c.cue, day: c.day })),
-    category: a.trackKey === 'bullying' ? 'bullying' : 'grooming',
-    trackKey: a.trackKey,
-  }));
+  const alerts: AlertItem[] = st.alerts.map((a) => {
+    const track = risk.tracks.find((t) => t.key === a.trackKey);
+    return {
+      id: a.id,
+      level: a.level as 1 | 2 | 3,
+      day: a.day,
+      time: a.time,
+      stage: track?.stage ?? risk.stage,
+      score: track?.score ?? risk.score,
+      contact: a.trackKey,
+      guardianTitle: a.title,
+      guardianBody: a.body,
+      cues: (track?.cues ?? []).map((c) => ({ cue: c.cue, day: c.day })),
+      category: a.trackKey === 'bullying' ? 'bullying' : 'grooming',
+      trackKey: a.trackKey,
+      caseKey,
+      childName,
+      historical: !!a.historical,
+      evidenceKeys: (track?.cues ?? []).map((c) => c.evidenceKey),
+    };
+  });
+  const scenarioId = meta.scenarioId ?? st.scenarioId ?? null;
   const state: Partial<DemoData> = {
     childId: st.child.id,
     participants,
@@ -520,7 +601,13 @@ function applyServerState(st: ServerState) {
     lastRun: (st.runs[st.runs.length - 1] as AnalysisResult) ?? null,
     simDay: Math.max(d.simDay, ...st.messages.map((m) => m.day)),
     activeConv,
-    scenarioId: st.scenarioId ?? (d.mode === 'B' ? null : d.scenarioId),
+    scenarioId,
+    origin,
+    checkpoint: meta.checkpoint,
+    generation: meta.generation,
+    // Scripted playback saves messages in script order, so the saved count is where playback resumes.
+    cursor: origin === 'scripted' ? st.messages.length : d.cursor,
+    historyInit: d.historyInit.status === 'analyzing' || d.historyInit.status === 'loading' ? d.historyInit : historyStatusOf(origin, meta.checkpoint, messages, backend),
     pending: [],
     runError: null,
   };
@@ -531,7 +618,7 @@ function applyServerState(st: ServerState) {
 // ---------- analysis loop ----------
 
 /** Run real analysis for one conversation up to a message. Local: automatic. ChatGPT: owner button only. */
-export async function analyzeConversation(conversationId: string, uptoMessageId: string | undefined, trigger: 'auto' | 'owner_button') {
+export async function analyzeConversation(conversationId: string, uptoMessageId: string | undefined, trigger: 'auto' | 'owner_button', opts: { historical?: boolean } = {}) {
   const d = get();
   const backend = d.backend;
   const epoch = caseEpoch;
@@ -544,19 +631,24 @@ export async function analyzeConversation(conversationId: string, uptoMessageId:
       { backend: apiBackend(backend), conversationId, uptoMessageId, requestId: rid(), trigger, model: backend === 'gpt' ? d.chatgpt.model ?? undefined : undefined },
       inflight.signal,
     );
-    if (epoch !== caseEpoch || get().backend !== backend) return; // stale: case reset or backend switched meanwhile
-    if (resp.result.stale) return; // a newer run covers these messages
-    applyRun(resp.result as AnalysisResult, resp.evidence as EvidenceEvent[], resp.firstSeen ?? {});
+    if (epoch !== caseEpoch || get().backend !== backend) return false; // stale: case replaced or backend switched meanwhile
+    if (resp.result.stale) {
+      dispatch({ type: 'pending', ids: waitingIds, on: false });
+      return false; // a newer run covers these messages
+    }
+    applyRun(resp.result as AnalysisResult, resp.evidence as EvidenceEvent[], resp.firstSeen ?? {}, !!opts.historical);
+    return true;
   } catch (e) {
-    if (epoch !== caseEpoch) return;
-    const err = e instanceof ApiError ? { code: e.code, message: e.message } : { code: 'internal', message: String(e) };
-    if (err.code === 'aborted') return;
+    if (epoch !== caseEpoch) return false;
+    const err = errOf(e);
+    if (err.code === 'aborted') return false;
     dispatch({ type: 'runError', error: err, clear: waitingIds.concat(uptoMessageId ? [uptoMessageId] : []) });
     if (err.code === 'server_offline') dispatch({ type: 'env', patch: { serverOnline: false } });
+    return false;
   }
 }
 
-function applyRun(run: AnalysisResult, evidence: EvidenceEvent[], firstSeen: Record<string, number>) {
+function applyRun(run: AnalysisResult, evidence: EvidenceEvent[], firstSeen: Record<string, number>, historical: boolean) {
   const d = get();
   const inputs = caseInputs(d, { evidence, firstSeen });
   const risk = riskOf(inputs);
@@ -565,19 +657,27 @@ function applyRun(run: AnalysisResult, evidence: EvidenceEvent[], firstSeen: Rec
   const lastFocus = d.messages.find((m) => m.id === run.focusMessageIds[run.focusMessageIds.length - 1]);
   const day = lastFocus?.day ?? d.simDay;
   const names = nameMap(d.participants);
-  const child = d.participants.find((p) => p.id === d.childId)?.displayName ?? CHILD.name;
-  const { items, next } = alertsToFire(risk, d.alerted, { day, time: lastFocus?.time ?? nowTime(), childName: child, names, runId: run.analysisId });
-  dispatch({ type: 'runApplied', run, analyses, evidence, firstSeen, risk, point: { day, score: risk.score, level: risk.level }, fire: items, alerted: next });
+  const childName = childNameOf(d);
+  const caseKey = caseKeyFor(d);
+  const { items, next } = alertsToFire(risk, d.alerted, { day, time: lastFocus?.time ?? nowTime(), childName, names, runId: run.analysisId });
+  const fire = items.map((a) => ({ ...a, caseKey, childName, historical, evidenceKeys: risk.tracks.find((t) => t.key === a.trackKey)?.cues.map((c) => c.evidenceKey) ?? [] }));
+  dispatch({ type: 'runApplied', run, analyses, evidence, firstSeen, risk, point: { day, score: risk.score, level: risk.level }, fire, alerted: next, historical });
   // Persist the deterministic outputs next to the evidence (fire-and-forget; the server de-duplicates alerts).
   const b = apiBackend(d.backend);
   api.snapshot(d.childId, { backend: b, runId: run.analysisId, day, score: risk.score, level: risk.level, stage: risk.stage, category: risk.category, dominantTrack: risk.dominantTrack, trace: risk.trace, evidenceKeys: evidence.filter((e) => e.status === 'active' || e.status === 'needs_review').map((e) => e.key) }).catch(() => {});
-  for (const a of items) api.alert(d.childId, { id: a.id, backend: b, trackKey: a.trackKey, level: a.level, day: a.day, time: a.time, title: a.guardianTitle, body: a.guardianBody }).catch(() => {});
+  for (const a of fire) api.alert(d.childId, { id: a.id, backend: b, trackKey: a.trackKey, level: a.level, day: a.day, time: a.time, title: a.guardianTitle, body: a.guardianBody, historical }).catch(() => {});
 }
 
 function recomputeRisk(patch: Partial<CaseInputs> = {}) {
   const d = get();
   const risk = riskOf(caseInputs(d, patch));
   dispatch({ type: 'setRisk', risk, dismissalList: patch.dismissals, blocks: patch.blocks });
+}
+
+/** Local backend only: analyse whatever was saved but never covered by a run (e.g. the child's last reply). */
+async function analyseTails(opts: { historical?: boolean } = {}) {
+  if (!autoAnalyses(get().backend)) return;
+  for (const t of unanalysedTails(get().messages)) await analyzeConversation(t.conversationId, t.lastId, 'auto', opts);
 }
 
 /** Child dismissed an L1 nudge: halves that track's score (engine rule), never below L1. */
@@ -591,12 +691,19 @@ export async function dismissNudge() {
   api.dismissal(d.childId, { day: d.simDay, trackKey }).catch(() => {});
 }
 
-/** Child tapped "Block" in a nudge: recorded so a brand-new contact right after it is flagged for review. */
+/** Child tapped "Block" in a nudge: recorded so a brand-new contact right after it is flagged for review. Simulator-only. */
 export function blockActiveContact() {
   const d = get();
   const conv = d.conversations.find((c) => c.id === d.activeConv);
   const contactId = conv?.kind === 'private' ? conv.participantIds.find((p) => p !== d.childId) : undefined;
   if (!contactId) return;
+  recordBlock(contactId);
+}
+
+/** Records a simulated block of one contact in this case (no real platform account is affected). */
+export function recordBlock(contactId: string) {
+  const d = get();
+  if (d.blocks.some((b) => b.contactId === contactId)) return;
   const blocks = [...d.blocks, { contactId, day: d.simDay }];
   recomputeRisk({ blocks });
   api.block(d.childId, { contactId, day: d.simDay }).catch(() => {});
@@ -609,16 +716,17 @@ async function postMessage(m: ChatMessage) {
     await api.addMessage({ id: m.id, conversationId: m.conversationId!, senderId: m.senderId!, day: m.day, time: m.time, text: m.text });
     return true;
   } catch (e) {
-    const err = e instanceof ApiError ? { code: e.code, message: e.message } : { code: 'internal', message: String(e) };
+    const err = errOf(e);
     dispatch({ type: 'runError', error: { code: err.code, message: `Message not saved: ${err.message}` } });
     if (err.code === 'server_offline') dispatch({ type: 'env', patch: { serverOnline: false } });
     return false;
   }
 }
 
-/** Mode B: a person typed a message on one of the phones. */
+/** Modes B and C: a person typed a message on one of the phones. */
 export async function sendLive(side: Side, text: string) {
   const d = get();
+  if (!canCompose(d.mode, d.origin, d.historyInit)) return;
   const convId = d.activeConv;
   if (!convId) return;
   const senderId = side === 'victim' ? d.childId : d.perspective;
@@ -626,8 +734,10 @@ export async function sendLive(side: Side, text: string) {
   const m: ChatMessage = { id: `m-${uid()}${uid()}`, kind: 'msg', from: side, conversationId: convId, senderId, text, day: d.simDay, time: nowTime() };
   dispatch({ type: 'push', message: m });
   const ok = await postMessage(m);
-  // Local hybrid analyses automatically. ChatGPT never runs from someone's typing: the owner must press the button.
-  if (ok && d.backend === 'inhouse' && senderId !== d.childId) void analyzeConversation(convId, m.id, 'auto');
+  // Every saved message is eligible for local contextual reassessment, including the child's own objections and
+  // clarifications (the engine never scores the child's own messages against the child). Rapid messages are
+  // coalesced by the server into one run that covers all of them. ChatGPT never runs from typing: owner button only.
+  if (ok && autoAnalyses(d.backend)) void analyzeConversation(convId, m.id, 'auto');
 }
 
 /** Owner-initiated ChatGPT analysis of the open conversation (Sign in with ChatGPT terms: no background use). */
@@ -663,6 +773,131 @@ export function openConversation(id: string) {
   dispatch({ type: 'setActiveConv', id });
 }
 
+// ---------- mode navigation ----------
+
+/** Switch the view. Never resets or replaces the case; stops scripted playback when leaving the Guided Demo. */
+export function setMode(mode: Mode) {
+  if (mode !== 'A' && get().playing) pause();
+  dispatch({ type: 'setMode', mode });
+}
+
+// ---------- Mode B: continue a conversation from history ----------
+
+/**
+ * Explicit "Load history": saves the scenario's messages up to a checkpoint on the server (idempotent), then
+ * analyses them in batches with the local pipeline. Cloud: messages only, until the owner presses Analyze.
+ */
+export async function loadHistory(scenarioId: string, target: { checkpoint?: string; upto?: number }, opts: { force?: boolean } = {}) {
+  const d0 = get();
+  const busy = d0.historyInit.status === 'loading' || d0.historyInit.status === 'analyzing';
+  const n = target.upto ?? d0.scenarios.find((s) => s.id === scenarioId)?.checkpoints.find((c) => c.id === target.checkpoint)?.after;
+  const key = `${scenarioId}@${n}`;
+  const same = (d0.scenarioId === scenarioId && d0.origin === 'history' && d0.checkpoint === n) || historyLoadKey === key;
+  if (busy && same && !opts.force) return; // a repeated click while the same history is still being set up
+  historyLoadKey = key;
+  if (d0.playing) pause();
+  runToken++;
+  initToken++;
+  dispatch({ type: 'historyInit', patch: { status: 'loading', done: 0, total: 0, error: null } });
+  let out;
+  try {
+    out = await api.loadHistory(scenarioId, target, opts.force);
+  } catch (e) {
+    const err = errOf(e);
+    historyLoadKey = null;
+    dispatch({ type: 'historyInit', patch: { status: 'failed', error: `History not loaded: ${err.message}` } });
+    if (err.code === 'server_offline') dispatch({ type: 'env', patch: { serverOnline: false } });
+    return;
+  }
+  if (!out.reused) {
+    bumpEpoch();
+    dispatch({ type: 'reset' });
+  }
+  dispatch({ type: 'hydrate', state: { scenarioId, mode: 'B' } });
+  savePrefs(get());
+  await hydrateFromServer();
+  try {
+    await initHistory();
+  } finally {
+    if (historyLoadKey === key) historyLoadKey = null;
+  }
+}
+
+/** Analyse the preloaded history batch by batch (bounded, sequential, resumable). Already analysed batches are skipped. */
+export async function initHistory() {
+  const token = ++initToken;
+  const epoch = caseEpoch;
+  const d = get();
+  if (d.origin !== 'history') return;
+  const chunks = historyChunks(d.messages, d.checkpoint);
+  const total = chunks.length;
+  let done = chunks.filter((c) => c.analysed).length;
+  if (!autoAnalyses(d.backend)) {
+    dispatch({ type: 'historyInit', patch: { status: done === total && total > 0 ? 'complete' : 'messages_only', done, total, error: null } });
+    return;
+  }
+  dispatch({ type: 'historyInit', patch: { status: 'analyzing', done, total, error: null } });
+  for (const c of chunks) {
+    if (c.analysed) continue;
+    const ok = await analyzeConversation(c.conversationId, c.lastId, 'auto', { historical: true });
+    if (token !== initToken || epoch !== caseEpoch) return; // cancelled or replaced: the newer action owns the status
+    if (!ok) {
+      const err = get().runError;
+      dispatch({ type: 'historyInit', patch: { status: 'failed', done, total, error: err ? `${err.message}` : 'Analysis of this part of the history did not complete.' } });
+      return;
+    }
+    done++;
+    dispatch({ type: 'historyInit', patch: { done } });
+  }
+  const after = get();
+  const baseline = { level: after.level, score: after.score, findings: after.evidence.filter((e) => e.status === 'active' || e.status === 'needs_review').length };
+  dispatch({ type: 'historyInit', patch: { status: 'complete', done, total, error: null, baseline } });
+}
+
+/** Stop after the batch that is already running (its result is real and is kept). Resume with initHistory(). */
+export function cancelHistoryInit() {
+  if (get().historyInit.status !== 'analyzing') return;
+  initToken++;
+  dispatch({ type: 'historyInit', patch: { status: 'cancelled' } });
+}
+
+/** Mode A → B: keep the played case exactly as it is and continue it live from the current point. */
+export async function continueLiveFromHere() {
+  const d = get();
+  if (d.origin !== 'scripted' || d.cursor === 0) return;
+  pause();
+  try {
+    const meta = await api.continueCase(d.childId);
+    dispatch({ type: 'hydrate', state: { origin: 'history', checkpoint: meta.checkpoint, generation: meta.generation, mode: 'B', caption: null } });
+    savePrefs(get());
+  } catch (e) {
+    dispatch({ type: 'runError', error: errOf(e) });
+    return;
+  }
+  // Playback analyses after other participants' messages; a trailing child reply is analysed now.
+  dispatch({ type: 'historyInit', patch: historyStatusOf('history', get().checkpoint, get().messages, get().backend) });
+  if (autoAnalyses(get().backend)) await initHistory();
+}
+
+// ---------- Mode C: fresh conversation ----------
+
+/** Explicit "Start new conversation": a new case with no preloaded messages and one default contact. */
+export async function startFreshConversation() {
+  if (get().playing) pause();
+  runToken++;
+  bumpEpoch();
+  dispatch({ type: 'reset' });
+  dispatch({ type: 'hydrate', state: { mode: 'C', scenarioId: null } });
+  savePrefs(get());
+  try {
+    await api.reset('live');
+  } catch {
+    dispatch({ type: 'env', patch: { serverOnline: false } });
+    return;
+  }
+  await hydrateFromServer();
+}
+
 // ---------- scenario player (Mode A) ----------
 
 function currentScenario(): ScenarioView | null {
@@ -676,14 +911,19 @@ export function scriptLength(): number {
   return currentScenario()?.messages.length ?? 0;
 }
 
-/** Load a scenario: resets the case on the server and creates its people and chats. */
+/** Checkpoint defined at the current playback position, if any. */
+export function checkpointAt(sc: ScenarioView | null, n: number): Checkpoint | null {
+  return sc?.checkpoints.find((c) => c.after === n) ?? null;
+}
+
+/** Load a scenario for playback: resets the case on the server and creates its people and chats. */
 export async function selectScenario(id: string) {
   runToken++;
   bumpEpoch();
   const keep = get();
   dispatch({ type: 'reset' });
   if (id === PREVIEW_ID) {
-    dispatch({ type: 'hydrate', state: { scenarioId: PREVIEW_ID, ...previewCast() } });
+    dispatch({ type: 'hydrate', state: { scenarioId: PREVIEW_ID, origin: 'preview', ...previewCast() } });
     dispatch({ type: 'setActiveConv', id: 'preview-c-kabir' });
     return;
   }
@@ -691,8 +931,10 @@ export async function selectScenario(id: string) {
     const sc = await api.loadScenario(id);
     const participants: ParticipantView[] = [{ id: sc.child.id, displayName: sc.child.name, role: 'protected_child' }, ...sc.participants.map((p) => ({ id: p.id, displayName: p.name, role: p.role }))];
     const conversations: ConversationView[] = sc.conversations.map((c) => ({ id: c.id, kind: c.kind, title: c.title, participantIds: c.participants }));
-    dispatch({ type: 'hydrate', state: { scenarioId: id, childId: sc.child.id, participants, conversations, activeConv: sc.messages[0]?.conversationId ?? conversations[0]?.id ?? null } });
+    dispatch({ type: 'hydrate', state: { scenarioId: id, origin: 'scripted', childId: sc.child.id, participants, conversations, activeConv: sc.messages[0]?.conversationId ?? conversations[0]?.id ?? null } });
     dispatch({ type: 'setActiveConv', id: sc.messages[0]?.conversationId ?? conversations[0].id });
+    // The generation identifies this case for its alerts.
+    await hydrateFromServer();
   } catch (e) {
     dispatch({ type: 'hydrate', state: { scenarioId: keep.scenarioId } });
     dispatch({ type: 'runError', error: { code: 'server_offline', message: e instanceof ApiError ? e.message : 'Could not load scenario' } });
@@ -747,6 +989,7 @@ async function runStep(i: number, token: number): Promise<boolean> {
   dispatch({ type: 'push', message: msg });
 
   if (preview) {
+    dispatch({ type: 'setCursor', cursor: i + 1 });
     if (step.analysis) {
       dispatch({ type: 'analyzing', id: msg.id });
       await wait(700);
@@ -757,7 +1000,12 @@ async function runStep(i: number, token: number): Promise<boolean> {
   } else {
     const ok = await postMessage(msg);
     if (!ok) return false;
-    if (get().backend === 'inhouse' && step.senderId !== get().childId) {
+    // The cursor counts saved messages, so pausing mid-analysis never leaves a saved message "unplayed".
+    dispatch({ type: 'setCursor', cursor: i + 1 });
+    // Playback keeps its pace by analysing after other participants' messages. A child reply is still assessed:
+    // it is in the focus of the next run (everything since the last analysed message), and a trailing child reply
+    // is analysed when playback stops (see play()).
+    if (autoAnalyses(get().backend) && step.senderId !== get().childId) {
       const before = get().alerts.length;
       await analyzeConversation(step.conversationId, msg.id, 'auto');
       if (epoch !== caseEpoch || token !== runToken) return false;
@@ -765,21 +1013,21 @@ async function runStep(i: number, token: number): Promise<boolean> {
     }
   }
   await wait(450);
-  if (token !== runToken) return false;
-  dispatch({ type: 'setCursor', cursor: i + 1 });
-  return true;
+  return token === runToken;
 }
 
 export async function play() {
   const d = get();
-  if (d.playing || d.mode !== 'A' || !d.scenarioId) return;
+  if (d.playing || d.mode !== 'A' || !d.scenarioId || (d.origin !== 'scripted' && d.origin !== 'preview')) return;
   const token = ++runToken;
+  const epoch = caseEpoch;
   dispatch({ type: 'setPlaying', playing: true });
   while (get().playing && token === runToken && get().cursor < scriptLength()) {
     const ok = await runStep(get().cursor, token);
     if (!ok) break;
   }
   if (token === runToken) dispatch({ type: 'setPlaying', playing: false });
+  if (epoch === caseEpoch && get().origin === 'scripted') await analyseTails();
 }
 
 export function pause() {
@@ -791,35 +1039,26 @@ export function pause() {
 
 export async function stepOnce() {
   const d = get();
-  if (d.playing || d.mode !== 'A' || !d.scenarioId) return;
+  if (d.playing || d.mode !== 'A' || !d.scenarioId || (d.origin !== 'scripted' && d.origin !== 'preview')) return;
   const token = ++runToken;
   dispatch({ type: 'setPlaying', playing: true });
   await runStep(get().cursor, token);
   if (token === runToken) dispatch({ type: 'setPlaying', playing: false });
 }
 
-/** Reset clears the synthetic case and its memory on the server too. */
+/** Explicit reset: restarts the current case from its own starting point and clears its memory on the server. */
 export async function resetDemo() {
-  runToken++;
-  bumpEpoch();
   const d = get();
-  dispatch({ type: 'reset' });
-  if (d.mode === 'A' && d.scenarioId) await selectScenario(d.scenarioId);
-  else if (d.mode === 'B') {
-    try {
-      await api.reset('live');
-    } catch {
-      dispatch({ type: 'env', patch: { serverOnline: false } });
-    }
-    await hydrateFromServer(true);
-  }
-}
-
-export async function setMode(mode: Mode) {
   runToken++;
+  if (d.origin === 'scripted' || d.origin === 'preview') return selectScenario(d.scenarioId!);
+  if (d.origin === 'history' && d.scenarioId) {
+    const sc = d.scenarios.find((s) => s.id === d.scenarioId);
+    const cp = sc?.checkpoints.find((c) => c.after === d.checkpoint);
+    return loadHistory(d.scenarioId, cp ? { checkpoint: cp.id } : { upto: d.checkpoint ?? 1 }, { force: true });
+  }
+  if (d.origin === 'fresh') return startFreshConversation();
   bumpEpoch();
-  dispatch({ type: 'setMode', mode });
-  if (mode === 'B') await hydrateFromServer(true);
+  dispatch({ type: 'reset' });
 }
 
 export async function setBackend(backend: Backend) {
@@ -828,8 +1067,12 @@ export async function setBackend(backend: Backend) {
   const d = get();
   if (d.playing) pause();
   dispatch({ type: 'setBackend', backend });
-  // Each backend keeps its own evidence for the same conversations, so results can be compared.
-  if (d.scenarioId !== PREVIEW_ID && (d.conversations.length || d.mode === 'B')) await hydrateFromServer(d.mode === 'B');
+  // Each backend keeps its own evidence for the same conversations, so results can be compared. Never a silent
+  // fallback: switching to cloud loads the case without running anything.
+  if (d.origin !== 'preview' && d.conversations.length) {
+    dispatch({ type: 'historyInit', patch: HISTORY_IDLE });
+    await hydrateFromServer();
+  }
   if (backend === 'gpt') void refreshChatGPT();
 }
 

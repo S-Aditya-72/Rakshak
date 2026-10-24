@@ -1,0 +1,23 @@
+{
+  "id": "e6-homework",
+  "title": "Photo request that context makes ordinary (homework)",
+  "child": { "id": "p-meera", "name": "Meera" },
+  "participants": [{ "id": "p-kabir", "name": "Kabir", "role": "contact" }],
+  "conversations": [
+    { "id": "e6-c", "kind": "private", "title": "Kabir", "participants": ["p-meera", "p-kabir"] }
+  ],
+  "messages": [
+    { "conv": "e6-c", "from": "p-kabir", "day": 1, "time": "9:43 PM", "text": "hey" },
+    { "conv": "e6-c", "from": "p-kabir", "day": 1, "time": "9:43 PM", "text": "did you write todays homework" },
+    { "conv": "e6-c", "from": "p-meera", "day": 1, "time": "9:43 PM", "text": "yes" },
+    { "conv": "e6-c", "from": "p-kabir", "day": 1, "time": "9:43 PM", "text": "can u send pics" }
+  ],
+  "expect": {
+    "level": [0, 0],
+    "categories": [],
+    "target": null,
+    "offenders": [],
+    "nonOffenders": ["p-kabir"],
+    "mustNotAlert": true
+  }
+}

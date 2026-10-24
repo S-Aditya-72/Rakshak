@@ -133,9 +133,9 @@ const STATS = [
 ];
 
 const PIPELINE = [
-  { icon: Languages, t: 'Normalise', d: 'Leetspeak, emoji and Tanglish are cleaned up and transliterated.' },
+  { icon: Languages, t: 'Save', d: 'Each message is saved to the case with its chat, sender and simulated day.' },
   { icon: Brain, t: 'Classify', d: 'RoBERTa flags overt abuse per message; Qwen3.5 (local) or ChatGPT reads the whole conversation.' },
-  { icon: Database, t: 'Remember', d: 'An encrypted per-contact memory keeps the history across days.' },
+  { icon: Database, t: 'Remember', d: 'Case memory (SQLite on the host) keeps evidence across days and across chats.' },
   { icon: Activity, t: 'Score', d: 'Cues add weight, decay with a 7-day half-life, and multiply in sequence.' },
   { icon: BellRing, t: 'Respond', d: 'Transparent thresholds decide: nudge, alert, or guided report.' },
 ];
@@ -181,8 +181,8 @@ export function LandingPage() {
             <span className="hero-grad"> Protection should too.</span>
           </motion.h1>
           <motion.p className="hero-sub" initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.9, ease: EASE, delay: 0.25 }}>
-            RAKSHAK is an on-device AI safety layer that spots grooming, sextortion and bullying patterns as they build over days, and
-            tells the right person at the right moment.
+            RAKSHAK is a prototype AI safety layer that spots grooming, sextortion and bullying patterns as they build over days, and
+            tells the right person at the right moment. Today it runs on a laptop with simulated phones.
           </motion.p>
           <motion.div className="hero-ctas" initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.8, ease: EASE, delay: 0.4 }}>
             <button className="l-btn" onClick={() => launch('A')}>
@@ -279,21 +279,21 @@ export function LandingPage() {
             <NeonBadge level={3} size="sm" />
             <div className="lvl-t">Critical</div>
             <div className="lvl-for">Seen by: parent, urgently</div>
-            <p className="lvl-d">Threats or payment demands trigger a guided report to 1930 and cybercrime.gov.in, sent only by the adult.</p>
+            <p className="lvl-d">Threats or payment demands open "Get help": support for the child, evidence review, and official reporting options the adult chooses to use.</p>
           </Reveal>
         </div>
       </section>
 
       {/* privacy */}
       <section id="privacy" className="l-section">
-        <SectionHead eyebrow="Privacy" title={<>In local mode, message text never leaves the device.</>} sub="Two interchangeable analysis backends feed the same transparent scoring engine, and we're honest about the difference." />
+        <SectionHead eyebrow="Privacy" title={<>In local mode, message text never leaves the host laptop.</>} sub="Two interchangeable analysis backends feed the same transparent scoring engine, and we're honest about the difference." />
         <div className="privacy-grid">
           <Reveal className="priv-card">
             <div className="priv-icon teal">
               <Cpu size={20} />
             </div>
             <div className="priv-t">RAKSHAK Hybrid · local</div>
-            <p>RoBERTa and Qwen3.5 4B run on this laptop, feeding our own fusion, case memory and scoring. Nothing is sent anywhere. A laptop prototype of the on-device design, not yet a phone app.</p>
+            <p>RoBERTa and Qwen3.5 4B run on the host laptop or server (127.0.0.1), feeding our own fusion, case memory and scoring. Nothing is sent to the cloud. The phones on screen are simulated: this is not on-device mobile inference yet.</p>
           </Reveal>
           <Reveal className="priv-card" delay={0.1}>
             <div className="priv-icon blue">
@@ -307,7 +307,7 @@ export function LandingPage() {
               <Lock size={20} />
             </div>
             <div className="priv-t">Minimal guardian payload</div>
-            <p>Parents see cue types, dates, stage and score, never message text. Evidence is stored locally with a 30-day scoring window.</p>
+            <p>Guardian alerts show cue types, dates, stage and score, not message text. Excerpts appear only if the guardian opens evidence review. The guardian screen is simulated, not delivery to a separate authenticated phone.</p>
           </Reveal>
         </div>
       </section>
@@ -321,8 +321,8 @@ export function LandingPage() {
               <div className="launch-icon">
                 <Bot size={24} />
               </div>
-              <div className="launch-t">Test cases</div>
-              <p>Five scripted conversations (banter, bullying, grooming, multi-day multi-chat, group pile-on) run through the real models. Alerts follow the live analysis.</p>
+              <div className="launch-t">A · Guided Demo</div>
+              <p>Five scripted conversations and two fictional case-study recreations run through the real models. Alerts follow the live analysis.</p>
               <span className="launch-go">
                 Start <ArrowRight size={15} />
               </span>
@@ -333,8 +333,8 @@ export function LandingPage() {
               <div className="launch-icon alt">
                 <MessagesSquare size={24} />
               </div>
-              <div className="launch-t">Live chat</div>
-              <p>Type anything on either phone, open private or group chats and skip days. Every new message is analysed for real, with memory across chats.</p>
+              <div className="launch-t">B · Continue the Conversation · C · Free Chat</div>
+              <p>Load an earlier conversation and type what happens next, or start a fresh one. Every new message is analysed for real, with memory across chats.</p>
               <span className="launch-go">
                 Start <ArrowRight size={15} />
               </span>

@@ -1,0 +1,45 @@
+{
+  "id": "cs-rapid-sextortion",
+  "kind": "case_study",
+  "caseStudy": "jordan-demay",
+  "number": 7,
+  "title": "One evening, rising demands",
+  "subtitle": "Fictional recreation inspired by a documented abuse pattern",
+  "tests": "Rapid financial sextortion: a fake persona, a private request, threatened exposure and escalating payment demands within one evening",
+  "intro": "Fictional recreation. Arav, 17, is messaged by an account presenting as a girl from a nearby school. Within about an hour the account asks for something private, then threatens to expose him to his followers and family unless he pays, and keeps demanding more. These are not the actual messages or participants.",
+  "child": { "id": "p-meera", "name": "Arav" },
+  "participants": [{ "id": "cs2-p-kiara", "name": "kiara.mehtaa", "role": "contact" }],
+  "conversations": [{ "id": "cs2-c-kiara", "kind": "private", "title": "kiara.mehtaa", "participants": ["p-meera", "cs2-p-kiara"] }],
+  "messages": [
+    { "conv": "cs2-c-kiara", "from": "cs2-p-kiara", "day": 1, "time": "9:02 PM", "text": "hey! you play for the school team right? saw your post 😊", "caption": "Day 1, 9:02 PM · a new account messages Arav" },
+    { "conv": "cs2-c-kiara", "from": "p-meera", "day": 1, "time": "9:04 PM", "text": "haha yeah. do i know you?" },
+    { "conv": "cs2-c-kiara", "from": "cs2-p-kiara", "day": 1, "time": "9:06 PM", "text": "new in town, i'm at the girls' school near yours. you're cute ngl" },
+    { "conv": "cs2-c-kiara", "from": "cs2-p-kiara", "day": 1, "time": "9:21 PM", "text": "let's swap private pics, just between us. delete the chat after 🤫" },
+    { "conv": "cs2-c-kiara", "from": "p-meera", "day": 1, "time": "9:24 PM", "text": "uh… i don't know" },
+    { "conv": "cs2-c-kiara", "from": "cs2-p-kiara", "day": 1, "time": "9:38 PM", "text": "i've screenshotted all your followers and your family's accounts. pay ₹10,000 right now or everything from this chat goes to all of them", "caption": "9:38 PM · threatened exposure and a payment demand" },
+    { "conv": "cs2-c-kiara", "from": "p-meera", "day": 1, "time": "9:40 PM", "text": "please don't. i don't have that much" },
+    { "conv": "cs2-c-kiara", "from": "cs2-p-kiara", "day": 1, "time": "9:41 PM", "text": "then send whatever you have on UPI now. deal or no deal" },
+    { "conv": "cs2-c-kiara", "from": "p-meera", "day": 1, "time": "9:52 PM", "text": "i sent ₹3,000. please stop now" },
+    { "conv": "cs2-c-kiara", "from": "cs2-p-kiara", "day": 1, "time": "9:53 PM", "text": "not enough. ₹7,000 more in 10 minutes or it goes viral" }
+  ],
+  "checkpoints": [
+    {
+      "id": "private-request",
+      "after": 5,
+      "label": "9:24 PM · a private request, Arav hesitates",
+      "intro": "A new account has flattered Arav and asked for private pictures and secrecy. Continue as either person.",
+      "suggestions": ["come on, everyone does it. no one will know", "nah, i don't do that. bye"]
+    },
+    {
+      "id": "first-demand",
+      "after": 7,
+      "label": "9:40 PM · the first payment demand",
+      "intro": "The account has threatened exposure and demanded money. Continue as either person, for example Arav saying he will tell a parent.",
+      "suggestions": ["i'm telling my dad and reporting you", "send it now or i post everything"]
+    }
+  ],
+  "presenter": [
+    "Nothing in this recreation is a real message. Do not attribute any line to the real people in the documented case.",
+    "The recreation never shows or describes any image. RAKSHAK cannot verify whether a threatened image exists."
+  ]
+}

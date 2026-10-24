@@ -15,16 +15,21 @@ npm run build      # type-check + production build
 | Route | What it shows |
 |---|---|
 | `/#/` | Landing page |
-| `/#/sim?mode=A` | Test cases (five scenarios, real pipeline) |
-| `/#/sim?mode=B` | Live chat: unscripted messages, private and group chats, multi-day |
+| `/#/sim?mode=A` | A · Guided Demo: five scripted examples + two fictional case studies, real pipeline |
+| `/#/sim?mode=B` | B · Continue the Conversation: preloaded history up to a checkpoint, then live |
+| `/#/sim?mode=C` | C · Free Chat: fresh conversation, private and group chats, multi-day |
 | `/#/predator` | Left phone only (pop-out) |
 | `/#/victim` | Child's phone only (pop-out) |
 | `/#/console` | Guardian phone + engine panels (pop-out) |
 
-Shortcuts: `Space` play/pause · `→` step · `E` engine drawer · `R` reset.
+Shortcuts: `Space` play/pause · `→` step · `S` studio · `E` engine drawer · `R` reset.
 
 Key files:
-- `src/store.ts`: state, the scenario player, the live analysis loop, stale-result protection, ChatGPT actions
+- `src/store.ts`: state, modes vs case origin, the scenario player, history load/initialisation, the live analysis loop, stale-result protection, ChatGPT actions
+- `src/lib/flow.ts`: pure mode/history rules (who may type, history batches, honest history status, persisted prefs)
+- `src/lib/report.ts`: guardian evidence report: selection, redaction, escaped HTML + JSON export
+- `src/console/Studio.tsx`: Studio panel per mode; `src/console/CaseStudyView.tsx`: case studies; `src/alerts/GetHelp.tsx`: guardian Get help
+- `src/data/caseStudies.ts`, `src/data/resources.ts`: sourced case-study facts and helpline/reporting copy (UI-only)
 - `src/lib/api.ts`: typed client; validates every analysis against the shared zod contract
 - `src/lib/case.ts`: evidence → engine → per-message `Analysis` and de-duplicated `AlertItem`s
 - `src/console/Analytics.tsx`: case card, score chart, trace, evidence (case memory), models panels

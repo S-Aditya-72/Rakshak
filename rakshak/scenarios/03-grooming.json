@@ -174,5 +174,28 @@
       "image_request",
       "threat_payment"
     ]
-  }
+  },
+  "intro": "Kabir, a new contact Meera has never met, builds rapport, then asks for secrecy. Fictional and non-graphic.",
+  "checkpoints": [
+    {
+      "id": "secrecy",
+      "after": 9,
+      "label": "Day 2 · secrecy has been asked for",
+      "intro": "Kabir has praised Meera and asked her to hide the chats from her parents. Continue as Kabir or Meera.",
+      "suggestions": [
+        "it's just better if it stays between us ok?",
+        "haha nvm, good luck with your test tomorrow!"
+      ]
+    },
+    {
+      "id": "after-refusal",
+      "after": 16,
+      "label": "Day 4 · Meera has refused a request",
+      "intro": "Meera said she does not want to send a photo. Continue as Kabir: accept it, or apply pressure.",
+      "suggestions": [
+        "no worries at all, forget i asked",
+        "if you don't, i'll show everyone our chats"
+      ]
+    }
+  ]
 }

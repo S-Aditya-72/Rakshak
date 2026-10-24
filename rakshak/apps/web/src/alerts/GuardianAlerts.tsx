@@ -1,12 +1,11 @@
-import { AnimatePresence, motion } from 'framer-motion';
-import { Ban, Lock, MessageCircleHeart, Phone, ShieldCheck, Users, X } from 'lucide-react';
+import { motion } from 'framer-motion';
+import { Ban, HeartHandshake, LifeBuoy, Lock, MessageCircleHeart, Phone, ShieldCheck, Users, X } from 'lucide-react';
 import { useEffect } from 'react';
-import { CHILD, CUE_META, LEVEL_META, WEEKDAYS } from '../data/meta';
-import { useDemo } from '../store';
+import { CUE_META, LEVEL_META, WEEKDAYS } from '../data/meta';
+import { childNameOf, useDemo, type HelpTab } from '../store';
 import type { AlertItem } from '../types';
 import { Icon3DWarning } from './Icon3DWarning';
 import { HazardStripe, NeonBadge, ScoreRing, StageStepper } from './primitives';
-import { ReportFlow } from './ReportFlow';
 
 export function AppIcon({ size = 22 }: { size?: number }) {
   return (
@@ -14,6 +13,12 @@ export function AppIcon({ size = 22 }: { size?: number }) {
       <ShieldCheck size={size * 0.62} strokeWidth={2.6} />
     </span>
   );
+}
+
+/** The child named in the alert itself (alerts keep their original identity), falling back to the loaded case. */
+function useChildName(alert: AlertItem) {
+  const current = useDemo((s) => childNameOf(s.data));
+  return alert.childName ?? current;
 }
 
 /** Level 2: iOS "Time Sensitive" banner that drops in from the top. */
@@ -74,7 +79,7 @@ export function NotificationCard({ alert }: { alert: AlertItem }) {
     <motion.button
       layout
       layoutId={`card-${alert.id}`}
-      className={`g-notif ${critical ? 'g-notif-critical' : ''}`}
+      className={`g-notif ${critical ? 'g-notif-critical' : ''} ${alert.historical ? 'g-notif-hist' : ''}`}
       initial={{ opacity: 0, y: 20, scale: 0.95 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       transition={{ type: 'spring', stiffness: 300, damping: 28 }}
@@ -83,7 +88,7 @@ export function NotificationCard({ alert }: { alert: AlertItem }) {
       <AppIcon size={30} />
       <div className="g-notif-text">
         <div className="g-notif-meta">
-          <span>RAKSHAK</span>
+          <span>RAKSHAK{alert.historical ? ' · from earlier history' : ''}</span>
           <span>
             Day {alert.day} · {alert.time}
           </span>
@@ -102,7 +107,9 @@ export function NotificationCard({ alert }: { alert: AlertItem }) {
 export function AlertSheet({ alert }: { alert: AlertItem }) {
   const dispatch = useDemo((s) => s.dispatch);
   const dismissals = useDemo((s) => s.data.dismissals);
+  const child = useChildName(alert);
   const critical = alert.level === 3;
+  const help = (tab: HelpTab) => dispatch({ type: 'openHelp', alert, tab });
 
   return (
     <>
@@ -127,7 +134,9 @@ export function AlertSheet({ alert }: { alert: AlertItem }) {
             <NeonBadge level={alert.level} size="sm" />
             <div className="sheet-title">{alert.guardianTitle}</div>
             <div className="sheet-sub">
-              {alert.contact} · {CHILD.name}'s phone{alert.preview ? ' · preview' : ''}
+              {alert.contact} · about {child}
+              {alert.preview ? ' · preview' : ''}
+              {alert.historical ? ' · from earlier history' : ''}
             </div>
           </div>
           <button className="sheet-x" onClick={() => dispatch({ type: 'closeSheet' })} aria-label="Close">
@@ -180,28 +189,25 @@ export function AlertSheet({ alert }: { alert: AlertItem }) {
           </div>
 
           <div className="privacy-line">
-            <Lock size={12} strokeWidth={2.4} /> Message content stays on {CHILD.name}'s device. You see cue types and dates only.
+            <Lock size={12} strokeWidth={2.4} /> This alert shows cue types and dates only. Excerpts open only through evidence review in Get help.
           </div>
-          <div className="privacy-line">AI-detected warning signs, not a confirmed offence. Please review with {CHILD.name} before acting.</div>
+          <div className="privacy-line">AI-detected warning signs, not a confirmed offence. Please review with {child} before acting.</div>
 
           <div className="sheet-actions">
-            {critical ? (
-              <button className="btn-critical" onClick={() => dispatch({ type: 'openReport' })}>
-                Start guided report
-              </button>
-            ) : (
-              <button className="btn-amber">
-                <MessageCircleHeart size={16} /> Talk to {CHILD.name}
-              </button>
-            )}
+            <button className={critical ? 'btn-critical' : 'btn-amber'} onClick={() => help('understand')}>
+              <LifeBuoy size={16} /> Get help
+            </button>
             <div className="sheet-actions-row">
-              <button className="btn-glass">
+              <button className="btn-glass" onClick={() => help('support')}>
+                <MessageCircleHeart size={15} /> Talk to {child}
+              </button>
+              <button className="btn-glass" onClick={() => help('support')}>
                 <Ban size={15} /> Block contact
               </button>
-              <button className="btn-glass">
-                <Users size={15} /> Loop in counsellor
-              </button>
             </div>
+            <button className="btn-glass" onClick={() => help('support')}>
+              <Users size={15} /> Loop in counsellor
+            </button>
           </div>
         </div>
       </motion.div>
@@ -212,97 +218,85 @@ export function AlertSheet({ alert }: { alert: AlertItem }) {
 /** Level 3: full-screen dark "CRITICAL" takeover with neon border, hazard band and siren glow. */
 export function CriticalTakeover({ alert }: { alert: AlertItem }) {
   const dispatch = useDemo((s) => s.dispatch);
-  const reportOpen = useDemo((s) => s.data.reportOpen);
+  const child = useChildName(alert);
+  const help = (tab: HelpTab) => dispatch({ type: 'openHelp', alert, tab });
 
   return (
     <motion.div className="critical" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, transition: { duration: 0.3 } }}>
       <div className="critical-vignette" />
       <div className="critical-border" />
 
-      <AnimatePresence mode="wait">
-        {reportOpen ? (
-          <motion.div key="report" className="critical-inner" initial={{ opacity: 0, x: 40 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 40 }}>
-            <ReportFlow onClose={() => dispatch({ type: 'closeReport' })} />
+      <motion.div
+        className="critical-inner"
+        initial={{ scale: 0.9, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        exit={{ opacity: 0, x: -40 }}
+        transition={{ type: 'spring', stiffness: 220, damping: 22, delay: 0.2 }}
+      >
+        <HazardStripe tone="amber" height={14} />
+        <div className="critical-top">
+          <span className="critical-app">
+            <AppIcon size={18} /> RAKSHAK · Day {alert.day} · {alert.time}
+          </span>
+          <button className="critical-x" onClick={() => dispatch({ type: 'closeCritical' })} aria-label="Close">
+            <X size={14} strokeWidth={2.8} />
+          </button>
+        </div>
+
+        <div className="critical-word">CRITICAL</div>
+
+        <div className="critical-icon">
+          <div className="siren-beam" />
+          <div className="siren-glow" />
+          <motion.div initial={{ y: -30, scale: 0.6 }} animate={{ y: 0, scale: 1 }} transition={{ type: 'spring', stiffness: 300, damping: 12, delay: 0.35 }}>
+            <Icon3DWarning variant="red" size={128} pedestal />
           </motion.div>
-        ) : (
-          <motion.div
-            key="alert"
-            className="critical-inner"
-            initial={{ scale: 0.9, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            exit={{ opacity: 0, x: -40 }}
-            transition={{ type: 'spring', stiffness: 220, damping: 22, delay: 0.2 }}
-          >
-            <HazardStripe tone="amber" height={14} />
-            <div className="critical-top">
-              <span className="critical-app">
-                <AppIcon size={18} /> RAKSHAK · Day {alert.day} · {alert.time}
-              </span>
-              <button className="critical-x" onClick={() => dispatch({ type: 'closeCritical' })} aria-label="Close">
-                <X size={14} strokeWidth={2.8} />
-              </button>
-            </div>
+        </div>
 
-            <div className="critical-word">CRITICAL</div>
+        <div className="critical-card">
+          <div className="critical-feature">URGENT ALERT</div>
+          <div className="critical-title">{alert.guardianTitle}</div>
+          <div className="critical-body">{alert.guardianBody}</div>
+          <ul className="critical-list">
+            {alert.category === 'bullying' ? (
+              <>
+                <li>A threat was detected. Keep {child} with a trusted adult.</li>
+                <li>Don't delete anything. Save the messages as evidence.</li>
+                <li>Contact the school; involve police if safety is at risk.</li>
+              </>
+            ) : alert.cues.some((c) => c.cue === 'threat_payment') ? (
+              <>
+                <li>Don't pay. Payment rarely stops the threats.</li>
+                <li>Don't delete anything. Chats are evidence.</li>
+                <li>Reassure {child}: this is not their fault.</li>
+              </>
+            ) : (
+              <>
+                <li>Don't delete anything. Chats are evidence.</li>
+                <li>Talk calmly with {child}: this is not their fault.</li>
+                <li>Don't confront the contact yourself. Get help walks you through it.</li>
+              </>
+            )}
+          </ul>
+        </div>
 
-            <div className="critical-icon">
-              <div className="siren-beam" />
-              <div className="siren-glow" />
-              <motion.div
-                initial={{ y: -30, scale: 0.6 }}
-                animate={{ y: 0, scale: 1 }}
-                transition={{ type: 'spring', stiffness: 300, damping: 12, delay: 0.35 }}
-              >
-                <Icon3DWarning variant="red" size={128} pedestal />
-              </motion.div>
-            </div>
-
-            <div className="critical-card">
-              <div className="critical-feature">URGENT ALERT</div>
-              <div className="critical-title">{alert.guardianTitle}</div>
-              <div className="critical-body">{alert.guardianBody}</div>
-              <ul className="critical-list">
-                {alert.category === 'bullying' ? (
-                  <>
-                    <li>A threat was made. Keep {CHILD.name} with a trusted adult.</li>
-                    <li>Don't delete anything. Save the messages as evidence.</li>
-                    <li>Contact the school; involve police only if safety is at risk.</li>
-                  </>
-                ) : alert.cues.some((c) => c.cue === 'threat_payment') ? (
-                  <>
-                    <li>Don't pay. Payment rarely stops the threats.</li>
-                    <li>Don't delete anything. Chats are evidence.</li>
-                    <li>Reassure {CHILD.name}: this is not their fault.</li>
-                  </>
-                ) : (
-                  <>
-                    <li>Don't delete anything. Chats are evidence.</li>
-                    <li>Talk calmly with {CHILD.name}: this is not their fault.</li>
-                    <li>Don't confront the contact yourself; use the guided report.</li>
-                  </>
-                )}
-              </ul>
-            </div>
-
-            <div className="critical-actions">
-              <motion.button className="btn-critical" whileTap={{ scale: 0.97 }} onClick={() => dispatch({ type: 'openReport' })}>
-                Start guided report
-              </motion.button>
-              <div className="sheet-actions-row">
-                <button className="btn-glass">
-                  <Phone size={15} /> Call 1930
-                </button>
-                <button className="btn-glass">
-                  <Users size={15} /> Trusted adult
-                </button>
-              </div>
-            </div>
-            <div className="privacy-line dark">
-              <Lock size={11} strokeWidth={2.4} /> Message content stays on {CHILD.name}'s device
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+        <div className="critical-actions">
+          <motion.button className="btn-critical" whileTap={{ scale: 0.97 }} onClick={() => help('understand')}>
+            <LifeBuoy size={16} /> Get help
+          </motion.button>
+          <div className="sheet-actions-row">
+            <button className="btn-glass" onClick={() => help('complaint')}>
+              <Phone size={15} /> 1930 & reporting
+            </button>
+            <button className="btn-glass" onClick={() => help('support')}>
+              <HeartHandshake size={15} /> Support {child}
+            </button>
+          </div>
+        </div>
+        <div className="privacy-line dark">
+          <Lock size={11} strokeWidth={2.4} /> Simulated guardian screen · nothing is sent or reported automatically
+        </div>
+      </motion.div>
     </motion.div>
   );
 }

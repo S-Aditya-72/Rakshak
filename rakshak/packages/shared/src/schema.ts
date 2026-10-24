@@ -51,11 +51,13 @@ export const AnalysisResultSchema = z.object({
       modifier: z.enum(MODIFIERS),
       confidence: z.enum(CONFIDENCES),
       rationale: z.string(),
+      contextBasis: z.string().nullable().optional(),
       verification: z.string().nullable().optional(),
     }),
   ),
   patterns: z.array(z.object({ type: z.string(), messageIds: z.array(z.string()), summary: z.string() })),
   explanation: z.string(),
+  conversationReading: z.string().optional(),
   uncertainReason: z.string().nullable(),
   roberta: z.array(
     z.object({

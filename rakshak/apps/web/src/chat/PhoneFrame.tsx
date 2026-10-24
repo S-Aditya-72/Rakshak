@@ -40,7 +40,7 @@ export function StatusBar({ shield = false }: { shield?: boolean }) {
       <div className="status-left">
         <span>9:41</span>
         {shield && (
-          <span className="rakshak-pill" title="RAKSHAK is active on this device">
+          <span className="rakshak-pill" title="Simulated phone: analysis runs on the host laptop, not on this phone">
             <ShieldCheck size={11} strokeWidth={2.6} />
           </span>
         )}

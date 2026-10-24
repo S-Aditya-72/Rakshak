@@ -120,6 +120,8 @@ class ModelFinding(Camel):
     modifier: str
     confidence: str
     rationale: str
+    # Which earlier messages shaped this reading (from the model), or "no earlier context".
+    context_basis: Optional[str] = None
     # Result of the verification pass: supported | unclear | corroborated (RoBERTa agrees) | known (already evidence) | None (not run)
     verification: Optional[str] = None
 
@@ -174,6 +176,8 @@ class AnalysisResult(Camel):
     findings: list[ModelFinding] = Field(default_factory=list)
     patterns: list[PatternNote] = Field(default_factory=list)
     explanation: str = ""
+    # The model's reading of the whole conversation, written before any finding.
+    conversation_reading: str = ""
     uncertain_reason: Optional[str] = None
     roberta: list[RobertaScore] = Field(default_factory=list)
     fusion: list[FusionDecision] = Field(default_factory=list)
@@ -244,6 +248,8 @@ class AlertIn(Camel):
     time: str
     title: str
     body: str
+    # Raised while an earlier conversation was being analysed (history preload): recorded, not pushed as a pop-up.
+    historical: bool = False
 
 
 class DismissalIn(Camel):

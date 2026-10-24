@@ -142,6 +142,13 @@ CREATE TABLE IF NOT EXISTS blocks (
 
 DEFAULT_CHILD = {"id": "p-meera", "display_name": "Meera"}
 
+# Columns added after the first release. Added in place when missing, so existing databases keep working.
+MIGRATIONS = (
+    ("protected_children", "origin", "TEXT"),
+    ("protected_children", "checkpoint", "INTEGER"),
+    ("alerts", "historical", "INTEGER NOT NULL DEFAULT 0"),
+)
+
 
 def new_id(prefix: str) -> str:
     return f"{prefix}-{uuid.uuid4().hex[:10]}"
@@ -157,6 +164,10 @@ class Store:
         self.conn = sqlite3.connect(str(path), check_same_thread=False, isolation_level=None)
         self.conn.row_factory = sqlite3.Row
         self.conn.executescript(SCHEMA)
+        for table, column, decl in MIGRATIONS:
+            cols = {r["name"] for r in self.conn.execute(f"PRAGMA table_info({table})").fetchall()}
+            if column not in cols:
+                self.conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {decl}")
 
     # ---------- helpers ----------
 
@@ -184,18 +195,43 @@ class Store:
         rows = self._q("SELECT generation FROM protected_children WHERE id=?", [child_id])
         return int(rows[0]["generation"]) if rows else -1
 
-    def reset_child(self, child_id: str, display_name: str = DEFAULT_CHILD["display_name"], scenario_id: Optional[str] = None) -> None:
-        """Clear one child's synthetic case and all associated memory. Bumps the generation so in-flight runs go stale."""
+    def reset_child(
+        self,
+        child_id: str,
+        display_name: str = DEFAULT_CHILD["display_name"],
+        scenario_id: Optional[str] = None,
+        origin: Optional[str] = None,
+        checkpoint: Optional[int] = None,
+    ) -> None:
+        """Clear one child's synthetic case and all associated memory. Bumps the generation so in-flight runs go stale.
+
+        origin records how the case started: 'scripted' (scenario playback), 'history' (an earlier conversation was
+        preloaded up to `checkpoint` messages, then continued live) or 'fresh' (a new conversation with no history).
+        """
         with self.tx():
             gen = self.generation(child_id)
             self._x("DELETE FROM protected_children WHERE id=?", [child_id])  # cascades
             self._x("DELETE FROM conversation_participants WHERE conversation_id NOT IN (SELECT id FROM conversations)")
-            self._x("INSERT INTO protected_children(id, display_name, generation, scenario_id) VALUES (?,?,?,?)", [child_id, display_name, gen + 1, scenario_id])
+            self._x(
+                "INSERT INTO protected_children(id, display_name, generation, scenario_id, origin, checkpoint) VALUES (?,?,?,?,?,?)",
+                [child_id, display_name, gen + 1, scenario_id, origin, checkpoint],
+            )
             self._x("INSERT INTO participants(id, child_id, display_name, role) VALUES (?,?,?,?)", [child_id, child_id, display_name, "protected_child"])
 
     def scenario_id(self, child_id: str) -> Optional[str]:
         rows = self._q("SELECT scenario_id FROM protected_children WHERE id=?", [child_id])
         return rows[0]["scenario_id"] if rows else None
+
+    def case_meta(self, child_id: str) -> dict:
+        rows = self._q("SELECT generation, scenario_id, origin, checkpoint FROM protected_children WHERE id=?", [child_id])
+        if not rows:
+            return {"generation": -1, "scenarioId": None, "origin": None, "checkpoint": None}
+        r = rows[0]
+        return {"generation": int(r["generation"]), "scenarioId": r["scenario_id"], "origin": r["origin"], "checkpoint": r["checkpoint"]}
+
+    def set_origin(self, child_id: str, origin: str, checkpoint: Optional[int]) -> None:
+        """Re-label an existing case without touching its memory (scripted playback continued live)."""
+        self._x("UPDATE protected_children SET origin=?, checkpoint=? WHERE id=?", [origin, checkpoint, child_id])
 
     # ---------- participants & conversations ----------
 
@@ -337,8 +373,8 @@ class Store:
             if alerted.get(a["track_key"], 0) >= a["level"]:
                 return False
             self._x(
-                "INSERT INTO alerts(id, child_id, backend, track_key, level, day, time, title, body, created_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
-                [a["id"], child_id, a["backend"], a["track_key"], a["level"], a["day"], a["time"], a["title"], a["body"], time.time()],
+                "INSERT INTO alerts(id, child_id, backend, track_key, level, day, time, title, body, historical, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                [a["id"], child_id, a["backend"], a["track_key"], a["level"], a["day"], a["time"], a["title"], a["body"], 1 if a.get("historical") else 0, time.time()],
             )
             alerted[a["track_key"]] = a["level"]
             self._x(
@@ -352,7 +388,8 @@ class Store:
         return json.loads(rows[0]["alerted"]) if rows else {}
 
     def alerts(self, child_id: str) -> list[dict]:
-        return [dict(r) for r in self._q("SELECT id, backend, track_key AS trackKey, level, day, time, title, body FROM alerts WHERE child_id=? ORDER BY created_at", [child_id])]
+        rows = self._q("SELECT id, backend, track_key AS trackKey, level, day, time, title, body, historical FROM alerts WHERE child_id=? ORDER BY created_at", [child_id])
+        return [{**dict(r), "historical": bool(r["historical"])} for r in rows]
 
     def add_dismissal(self, child_id: str, day: int, track_key: Optional[str]) -> None:
         self._x("INSERT INTO dismissals(child_id, day, track_key) VALUES (?,?,?)", [child_id, day, track_key])

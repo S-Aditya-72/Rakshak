@@ -32,7 +32,7 @@ L2 guardian alert, L3 critical) using a deterministic engine. The models label e
 | Deterministic engine | `packages/engine` | Pure function `computeRisk(evidence) → tracks, score, level, stage, trace`. Config in `packages/engine/config.json` |
 | Inference service | `apps/server` | Memory, context, RoBERTa, Qwen, verification, fusion, reconciliation, APIs |
 | SIWC companion | `apps/siwc-companion` | Sign in with ChatGPT via the official `@siwc/local` SDK; holds tokens; localhost only |
-| Prompts | `prompts/` | `analysis_system.v1.md` (Qwen + ChatGPT), `verify_findings.v1.md` |
+| Prompts | `prompts/` | `analysis_system.v2.md` (Qwen + ChatGPT), `verify_findings.v2.md` (v1 kept for comparison) |
 | Scenarios | `scenarios/` | 5 demo test cases + `scenarios/eval/` extra fixtures, with `expect` blocks used only by the evaluator |
 | Web UI | `apps/web` | Existing design, now wired to real analysis |
 
@@ -105,38 +105,97 @@ Open `http://127.0.0.1:5280`. The status pill (top right of the simulation) show
 | Route | |
 |---|---|
 | `/#/` | Landing page |
-| `/#/sim?mode=A` | Test cases: pick one of five in **Settings → Test case**, press Play |
-| `/#/sim?mode=B` | Live chat: type on either phone; the back arrow opens the chat list; ✎ creates private or group chats |
+| `/#/sim?mode=A` | **A · Guided Demo**: Studio panel → pick a core example or case study → Play |
+| `/#/sim?mode=B` | **B · Continue the Conversation**: Studio panel → pick a conversation and checkpoint → *Load history and continue* |
+| `/#/sim?mode=C` | **C · Free Chat**: Studio panel → *Start new conversation*; type on either phone, ✎ creates private or group chats |
 | `/#/predator`, `/#/victim` | Pop-out single phones (other participants / the child) |
 | `/#/console` | Pop-out guardian phone + engine panels (stays in sync) |
 
-Shortcuts: `Space` play/pause · `→` step · `E` engine drawer · `R` reset (clears the case **and** its server memory).
+Shortcuts: `Space` play/pause · `→` step · `S` Studio panel · `E` engine drawer · `R` reset (restarts the current case
+from its own starting point and clears its server memory). Switching modes, or a `?mode=` in the URL, never resets the case.
+
+### 3.1 Troubleshooting
+
+- **`Failed to resolve import "@rakshak/engine"` (or `@rakshak/shared`).** The workspace links in
+  `node_modules/@rakshak/` are broken. This happens when the project is copied or unzipped with `node_modules/`
+  included: npm links workspaces with symlinks (junctions on Windows), and most zip tools store them as empty folders.
+  Delete `node_modules/@rakshak/` and run `npm install` again, then restart `npm run dev`.
+- **`Port 5280 is already in use` / `[Errno 10048] … 8787`.** Another copy of RAKSHAK (or an earlier run) is still
+  listening. Stop it (Windows: `Get-NetTCPConnection -LocalPort 5280 -State Listen` gives the process ID), or run this
+  copy on other ports:
+
+  ```bash
+  RAKSHAK_PORT=8797 npm run server
+  cd apps/web && RAKSHAK_API=http://127.0.0.1:8797 npx vite --port 5290
+  ```
+
+  (`npm run dev -- --port …` does not work: the root script calls a workspace script, which drops the flag.)
 
 ## 4. Using it
 
 - **Backend selector** (Settings → Analysis backend): *Hybrid · Local* or *ChatGPT · Cloud*. Each backend keeps its own
   evidence for the same chats, so you can compare them. Switching changes real inference, not cosmetics.
-- **Mode A** plays scripted messages but every verdict comes from the live pipeline. Expect each analysed message to take
-  ~3–8 s on the RTX 5060. *Presentation preview (offline)* replays the old precomputed six-day script and is labelled
-  "not live AI" everywhere it appears.
-- **Mode B**: pick who types on the left phone (sender picker in group chats), create chats, use Settings → Sim clock
-  `+1 day` to test multi-day memory and decay. The local backend analyses each new message from a non-child sender.
+- **Modes and cases.** The header shows the selected mode (A/B/C) and, separately, the current case and how it started
+  (*Scripted playback*, *Continued from history*, *Fresh conversation*, or the precomputed *Presentation preview*).
+  Changing mode is navigation only; loading a scenario, loading a history, starting a new conversation and reset are the
+  only actions that replace a case. A refresh restores the server's case.
+- **A · Guided Demo** plays scripted messages but every verdict comes from the live pipeline. Expect each analysed message
+  to take ~3–8 s on the RTX 5060. *Presentation preview (offline)* replays the old precomputed six-day script and is
+  labelled "not live AI" everywhere it appears. Paused playback can be continued live (*Continue live from here*): the
+  case is kept exactly as played and script lines after that point are never sent.
+- **B · Continue the Conversation** loads a scenario's earlier messages up to a checkpoint (same IDs, people, chats,
+  days), analyses them in day-by-chat batches with the local models, then lets anyone type the next messages. Alerts
+  found in the history are recorded and listed ("from earlier history"), not popped up; the Studio panel shows the
+  baseline. With ChatGPT · Cloud selected, the history is loaded but not analysed until the owner presses Analyze.
+  Presenter ideas in the panel are never sent to a model.
+- **C · Free Chat** starts a new case with no history. Pick who types on the left phone (sender picker in group chats),
+  create chats, use Settings → Sim clock `+1 day` to test multi-day memory and decay.
+- **Reassessment.** With the local backend every saved live message, including the child's own objections, triggers a
+  contextual reassessment (bursts are coalesced on the server). ChatGPT never runs automatically.
+- **Case studies** (Amanda Todd, Jordan DeMay): sourced background, a clearly labelled fictional recreation, guided
+  playback, *Continue live from here* checkpoints, "Documented events" vs "Possible support with RAKSHAK", what the
+  pipeline actually flagged in this run, and sources. The real cases' outcomes are never given to a model.
+- **Get help** (guardian, from L2/L3 alerts): understand the concern (recorded messages, AI interpretations and the
+  deterministic level shown separately), support the child, review evidence and export a redacted HTML/JSON report, and
+  complaint options (standard complaint, anonymous-reporting eligibility, official portal). Nothing is submitted or sent;
+  blocks are simulator-only.
 - **Engine drawer** tabs: *Case* (score ring, tracks, chart), *Evidence* (case memory grouped by chat, with model
   provenance, status and target), *Trace* (per message: RoBERTa score, Qwen verdict, fusion agreement, rule trace,
-  measured latency), *Models* (live model status and the full validated output of the latest run). The ↻ button
-  re-analyses every chat; unchanged evidence never inflates the score.
+  measured latency, and the context the model was given: messages, approximate tokens, truncation, related findings),
+  *Models* (live model status and the full validated output of the latest run). Clicking a cue in the trace opens its
+  evidence row. The ↻ button re-analyses every chat; unchanged evidence never inflates the score.
+
+### 4.1 Rehearsal (all with the local backend)
+
+1. **A, scripted:** Studio → *Cyberbullying* → Play. Pause midway → *Continue live from message N* → type as Dev.
+2. **B, friendly history:** Studio → *Friendly banter* → checkpoint *Day 2 · Meera has just set a boundary* → *Load history
+   and continue* → wait for "History analysed" → type as Riya: "oh ok, fair! sorry". Then try ignoring the boundary.
+3. **B, concerning history:** *Cyberbullying* → *Meera has asked Dev to stop* → type an escalation as Dev, then an
+   objection on Meera's phone (the child's message is reassessed too).
+4. **C, fresh:** *Start new conversation* → type anything on either phone; ✎ for a group chat.
+5. **Guardian help:** open an L2/L3 alert on the guardian phone → *Get help* → *Evidence & report* → *Open evidence review*
+   → untick/edit/redact → download HTML and JSON. Check the preview shows "Not submitted" and no child name.
+6. **Case studies:** Studio → *Case study* on each card → read sections 1–6 → *Load in Guided Demo* (A) or *Continue live
+   from here* (B). History setup takes ~5 s per batch.
+
+Scripted runs are synthetic demonstrations, not evidence of accuracy; the same input can land on a different level
+between runs (§9).
 
 ## 5. How the pipeline works
 
 **Context (per analysis).** The active conversation oldest-first, always including the new (focus) messages and every
 message that already carries evidence, then filling newest-first to a token budget (`RAKSHAK_CONTEXT_TOKEN_BUDGET`,
-default 4200 within an 8192 context). Plus prior findings for the chat and up to 12 evidence items from the child's
+default 11000 within a 16384 context, so in practice the whole chat is sent; only chats over ~30k characters drop old
+plain messages, and that is reported). Plus prior findings for the chat and up to 12 evidence items from the child's
 *other* chats. Message IDs are aliased (`m01…`) and the output schema enumerates only those IDs and the chat's
 participants, so Qwen cannot cite messages or people that are not there. Transcript text is wrapped as untrusted data.
 
-**Models.** RoBERTa scores each focus message (raw softmax, shown as such). Qwen reads the whole context and returns
-findings `{message, cue, target, modifier (none/banter/quoted/counterspeech), confidence (low/medium/high)}`, patterns,
-retractions and an assessment (harmless / concerning / harmful / uncertain). Qwen never sees RoBERTa's output and is
+**Models.** RoBERTa scores each focus message (raw softmax, shown as such). Qwen reads the whole context and first writes a
+`conversation_reading` (who the participants are to each other, the topic, what the new messages refer to), then
+findings `{message, context_basis, cue, target, modifier (none/banter/quoted/counterspeech), confidence (low/medium/high)}`,
+patterns, retractions and an assessment (harmless / concerning / harmful / uncertain). The schema orders these fields so
+the model states context before any verdict. The verification pass gets the same whole transcript, and any finding the
+model's own whole-chat assessment contradicts goes to needs_review (it cannot raise an alert on its own). Qwen never sees RoBERTa's output and is
 never gated on it. Settings: temperature 0, top_k 1, fixed seed, `think:false`, structured output, `keep_alive 30m`,
 one request at a time on the GPU.
 
@@ -195,7 +254,7 @@ Then in the UI: Settings → backend *ChatGPT · Cloud* → **Continue with Chat
 discovered model → tick the cloud-processing disclosure → press **Analyze with ChatGPT** in the dock.
 
 Safeguards, from the [Sign in with ChatGPT Terms](https://openai.com/policies/sign-in-with-chatgpt-terms/):
-- Requests run only from the owner's explicit button (`trigger: owner_button`) after consent. Mode B typing never calls
+- Requests run only from the owner's explicit button (`trigger: owner_button`) after consent. Typing in Modes B and C never calls
   ChatGPT, so another person's activity cannot trigger requests on the owner's plan (Terms §2).
 - Tokens stay in the companion's OS-encrypted store (DPAPI on Windows, Keychain on macOS, libsecret on Linux). The
   companion refuses requests without its per-launch secret and any request carrying a browser `Origin`. It accepts only
@@ -222,11 +281,22 @@ npm test                 # engine + contract (Vitest): golden 1.0 → 2.9 → 8.
 npm run test:server      # Python: fusion, memory, staleness, validation, failure modes (fake models, no GPU)
 npm run eval             # real models over all scenarios → eval/reports/latest.md   (server + Ollama running)
 npm run e2e -- scenario s4-crosschat     # drives the real UI in headless Chrome (dev server + service running)
-npm run e2e -- live "message one" "message two"
+npm run e2e -- live "message one" "message two"                     # C: fresh conversation, then reload + backend switch
+npm run e2e -- history s2-bullying asked-to-stop "msg" "child:msg"   # B: history checkpoint, then live (child: = child's phone)
+E2E_HELP=1 npm run e2e -- history cs-rapid-sextortion first-demand "child:i'm telling my dad"   # + Get help/report check
+E2E_STOP_AT=9 E2E_LIVE='["a live message"]' npm run e2e -- scenario cs-sustained-coercion       # A → continue live
 ```
 
-Scenario IDs: `s1-banter`, `s2-bullying`, `s3-grooming`, `s4-crosschat`, `s5-group`. The e2e script needs Google
-Chrome; set `CHROME_PATH` if it is not in the default install location.
+Unit tests: Vitest covers the engine (unchanged golden fixtures), mode/history rules (`lib/flow.test.ts`), store
+transitions with a mocked API (`store.test.ts`: no reset on mode change, exact history prefix, idempotent reloads,
+failure/resume, cloud never auto-runs, child messages reassessed, historical alerts not popped up) and the report
+(`lib/report.test.ts`: redaction, escaping, no originals in redacted exports, source data unchanged). Pytest covers the
+history endpoint (prefix only, stable IDs, idempotency, stale runs after a switch, case-study listing, cross-chat
+identities, old-database migration). These use fake models: they test bookkeeping, not model accuracy.
+
+Scenario IDs: `s1-banter`, `s2-bullying`, `s3-grooming`, `s4-crosschat`, `s5-group`; case studies
+`cs-sustained-coercion`, `cs-rapid-sextortion` (not part of `npm run eval`). Each has two checkpoints (see the JSON). The e2e
+script needs Google Chrome; set `CHROME_PATH` if it is not in the default install location.
 
 See [`eval/reports/latest.md`](eval/reports/latest.md) for the latest real-model results, including misses.
 
@@ -234,7 +304,8 @@ Latest run (2026-10-24, RTX 5060, 10 synthetic cases, local hybrid): level withi
 false-positive or false-negative alerts, 0 invalid evidence references, **2 attribution errors** (a birthday-surprise
 sender listed as a source of a needs-review secrecy cue; one group sender missed in the multi-chat case), p50 latency
 3.1–5.9 s per analysed message. An earlier run, before the verification pass and the banter-mutuality check, scored 7/10.
-Results vary between runs; ChatGPT was not evaluated (not signed in).
+Results vary between runs; ChatGPT was not evaluated (not signed in). Scenarios 01 (a boundary) and 05 (a quoted defence)
+gained a few lines after that run: re-run `npm run eval` before quoting numbers.
 
 ## 8. Configuration
 
@@ -244,8 +315,8 @@ Environment variables, all prefixed `RAKSHAK_` (defaults in brackets). No `.env`
 |---|---|
 | Service (`apps/server/rakshak_server/config.py`) | `HOST` (127.0.0.1), `PORT` (8787), `DATA_DIR` (`rakshak/data`), `LOG_TEXT` (0: raw chat text is not logged) |
 | RoBERTa | `ROBERTA_MODEL` (nayan90k/roberta-finetuned-cyberbullying-detection), `ROBERTA_ENABLED` (1), `ROBERTA_DEVICE` (cpu \| cuda \| mps \| auto), `ROBERTA_THRESHOLD` (0.5) |
-| Qwen / Ollama | `OLLAMA_URL` (http://127.0.0.1:11434), `QWEN_MODEL` (qwen3.5:4b), `QWEN_NUM_CTX` (8192), `QWEN_NUM_PREDICT` (1200), `QWEN_TIMEOUT_S` (120), `QWEN_KEEP_ALIVE` (30m), `QWEN_SEED` (7), `VERIFY` (1), `WARMUP` (1) |
-| Context | `CONTEXT_TOKEN_BUDGET` (4200), `RELATED_EVIDENCE_LIMIT` (12) |
+| Qwen / Ollama | `OLLAMA_URL` (http://127.0.0.1:11434), `QWEN_MODEL` (qwen3.5:4b), `QWEN_NUM_CTX` (16384; use 8192 if VRAM is tight), `QWEN_NUM_PREDICT` (1200), `QWEN_TIMEOUT_S` (120), `QWEN_KEEP_ALIVE` (30m), `QWEN_SEED` (7), `VERIFY` (1), `WARMUP` (1) |
+| Context | `CONTEXT_TOKEN_BUDGET` (11000), `RELATED_EVIDENCE_LIMIT` (12) |
 | ChatGPT | `CHATGPT_ENABLED` (1), `CHATGPT_TIMEOUT_S` (180), `COMPANION_URL` (http://127.0.0.1:8788), `COMPANION_PORT` (companion side, 8788) |
 | Scripts / tooling | `ALLOW_DOWNLOAD` (0, `start-server.mjs`), `TORCH_INDEX` (CPU wheel index, `setup-server.ps1`), `API` (http://127.0.0.1:8787, Vite proxy and `eval.ts`), `WEB` (http://127.0.0.1:5280, e2e target) |
 
@@ -265,6 +336,18 @@ Scoring rules: `packages/engine/config.json`.
 - Counterspeech keeps the Plan's ×0.3 weight, so a friend defending the child adds a small amount (it never names the
   friend as an offender). Set `reductions.counterspeech` to 0 in the engine config if you prefer.
 - The demo scenarios were written by the team; passing them is not evidence of general accuracy.
-- Mode B sync between windows uses BroadcastChannel (one browser on one machine).
+- Window sync uses BroadcastChannel (one browser on one machine). The guardian phone is a simulated screen, not
+  authenticated delivery to a separate device, and the phones are not doing on-device inference: local analysis runs on
+  the host laptop (127.0.0.1).
+- In a rehearsal of the group pile-on, RoBERTa flagged Riya's quoted defence and a harmless message of hers without Qwen
+  agreeing; both became *needs review* evidence at half weight, so she was listed among the bullying track's senders.
+  The case studies' "Observed in this run" panel and the trace show such misses rather than hiding them.
+- History initialisation is sequential (~5 s per batch). Alerts from history are not popped up by design; if the history
+  already warrants concern, the baseline says so.
+- Redaction is automatic for the child's known name/ID, terms the guardian adds, phones, emails, links and @handles. It
+  can miss other identifying details; the report says so and must be reviewed.
+- Case-study facts were read from Internet Archive snapshots of the CBC and U.S. DOJ pages (their sites blocked our
+  fetcher), and the Indian reporting guidance from PIB / India Code pages; cybercrime.gov.in itself was unreachable from
+  our network. Re-check the live pages before presenting.
 - macOS was not tested by us.
 - The ChatGPT path is untested end to end (no sign-in performed) and carries the compliance caveat above.

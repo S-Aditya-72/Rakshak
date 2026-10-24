@@ -6,6 +6,8 @@ import {
   ExternalLink,
   FastForward,
   Gauge,
+  History,
+  PanelLeftOpen,
   PanelRightClose,
   PanelRightOpen,
   Pause,
@@ -21,20 +23,26 @@ import {
 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
+import { GetHelp } from '../alerts/GetHelp';
 import { GuardianPhone } from '../alerts/GuardianPhone';
 import { NudgeCard } from '../alerts/NudgeCard';
 import { ChatScreen } from '../chat/ChatScreen';
 import { PhoneFrame } from '../chat/PhoneFrame';
-import { CaseCard, DebugFeed, EvidencePanel, ModelsPanel, ScoreChart } from '../console/Analytics';
+import { CaseCard, DebugFeed, EVIDENCE_EVENT, EvidencePanel, ModelsPanel, ScoreChart } from '../console/Analytics';
+import { CaseStudyView } from '../console/CaseStudyView';
 import { ChatGPTPanel } from '../console/ChatGPTPanel';
 import { Segmented } from '../console/Segmented';
-import { BACKEND_META, CHILD, CUE_ACTIVE_P, CUE_META, GUARDIAN, LEVEL_META, WEEKDAYS } from '../data/meta';
+import { Studio } from '../console/Studio';
+import { BACKEND_META, CUE_ACTIVE_P, CUE_META, GUARDIAN, LEVEL_META, WEEKDAYS } from '../data/meta';
 import { SCENARIO as PREVIEW_SCRIPT } from '../data/scenario';
+import { canCompose, MODE_META, ORIGIN_META } from '../lib/flow';
 import { usePhoneScale } from '../lib/hooks';
 import {
   analyzeAllChats,
   analyzeWithChatGPT,
   bootstrap,
+  childNameOf,
+  continueLiveFromHere,
   pause,
   play,
   PREVIEW_ID,
@@ -42,13 +50,12 @@ import {
   refreshHealth,
   resetDemo,
   scriptLength,
-  selectScenario,
   setBackend,
   setMode,
   stepOnce,
   useDemo,
 } from '../store';
-import type { Level } from '../types';
+import type { Level, Mode } from '../types';
 
 type Spot = 'predator' | 'victim' | 'guardian';
 
@@ -79,28 +86,60 @@ function useSpotlight() {
   return spot;
 }
 
-const OUTCOME: Record<Level, string> = {
-  0: 'logged quietly',
-  1: `private nudge to ${CHILD.name}`,
-  2: `${GUARDIAN.name} alerted`,
-  3: 'critical alert + guided report',
-};
+const outcome = (level: Level, child: string) =>
+  ({ 0: 'logged quietly', 1: `private nudge to ${child}`, 2: `${GUARDIAN.name} alerted`, 3: 'critical alert + Get help' })[level];
+
+/** Default caption when nothing more specific is happening, per mode and case origin. */
+function idleCaption(d: ReturnType<typeof useDemo.getState>['data']): string {
+  if (d.mode === 'A') return d.origin === 'scripted' || d.origin === 'preview' ? 'Press Play to run the example through the real pipeline' : 'Pick an example or case study in the Studio panel';
+  if (d.mode === 'B') {
+    if (d.origin === 'scripted') return 'This is the Guided Demo case. Continue it live, or load an earlier conversation';
+    if (d.origin !== 'history') return 'Choose an earlier conversation in the Studio panel and load it';
+    return 'Type the next message on either phone';
+  }
+  if (d.origin !== 'fresh') return 'Press “Start new conversation” to begin a fresh case';
+  return 'Type on either phone. Open the chat list to switch or create chats';
+}
 
 /** One-line narration of what the engine just did. */
 function Caption() {
   const d = useDemo((s) => s.data);
   let key = 'idle';
-  let content: React.ReactNode =
-    d.mode === 'A' ? (d.scenarioId ? 'Press Play to run the scenario through the real pipeline' : 'Pick a test case in Settings to begin') : 'Type on either phone. Open the chat list to switch or create chats';
+  let content: React.ReactNode = idleCaption(d);
   let level: Level | null = null;
+  const h = d.historyInit;
 
   const last = [...d.messages].reverse().find((m) => m.analysis && (!d.activeConv || m.conversationId === d.activeConv || !m.conversationId));
   if (d.runError) {
     key = `err-${d.runError.code}`;
     content = <span style={{ color: LEVEL_META[2].color }}>{d.runError.message}</span>;
+  } else if (h.status === 'loading') {
+    key = 'h-loading';
+    content = <span className="shimmer">Saving the earlier conversation…</span>;
+  } else if (h.status === 'analyzing') {
+    key = `h-an-${h.done}`;
+    content = (
+      <span className="shimmer">
+        Analysing earlier history locally · batch {Math.min(h.done + 1, h.total)} of {h.total} · alerts from history are recorded, not popped up
+      </span>
+    );
   } else if (d.analyzingId) {
     key = `an-${d.analyzingId}`;
-    content = <span className="shimmer">{d.backend === 'gpt' ? 'Analysing with ChatGPT (cloud)…' : 'RoBERTa + Qwen3.5 analysing locally…'}</span>;
+    content = <span className="shimmer">{d.backend === 'gpt' ? 'Analysing with ChatGPT (cloud)…' : 'Analysing the conversation locally (RoBERTa + Qwen3.5)…'}</span>;
+  } else if (d.mode === 'B' && d.origin === 'history' && h.status === 'messages_only') {
+    key = 'h-msgs';
+    content = 'History loaded, not analysed · press “Analyze with ChatGPT” to run cloud analysis';
+  } else if (d.mode !== 'A' && d.origin === 'history' && h.status === 'complete' && d.messages.filter((m) => m.kind === 'msg').length <= (d.checkpoint ?? 0)) {
+    key = `h-done-${d.level}`;
+    level = d.level;
+    content = (
+      <>
+        <b>History analysed</b>
+        <span className="cap-sep">·</span>
+        baseline <span style={{ color: LEVEL_META[d.level].color }}>{LEVEL_META[d.level].short} · {LEVEL_META[d.level].label}</span>
+        <span className="cap-arrow">→</span> now type the next message
+      </>
+    );
   } else if (last?.analysis) {
     const a = last.analysis;
     level = a.level;
@@ -114,11 +153,11 @@ function Caption() {
         <span className="cap-sep">·</span>
         {cues.length ? `${[...new Set(cues)].join(' + ')} detected` : a.run?.assessment === 'uncertain' ? 'model uncertain' : 'no harmful cues on this message'}
         <span className="cap-arrow">→</span>
-        <span style={{ color: LEVEL_META[a.level].color }}>{OUTCOME[a.level]}</span>
+        <span style={{ color: LEVEL_META[a.level].color }}>{outcome(a.level, childNameOf(d))}</span>
         {a.preview && <span className="cap-sep">· preview, not live AI</span>}
       </>
     );
-  } else if (d.caption) {
+  } else if (d.caption && d.mode === 'A') {
     key = `cap-${d.caption}`;
     content = d.caption;
   } else if (d.messages.length) {
@@ -187,33 +226,6 @@ function Progress() {
   );
 }
 
-function ScenarioPicker() {
-  const scenarios = useDemo((s) => s.data.scenarios);
-  const scenarioId = useDemo((s) => s.data.scenarioId);
-  const online = useDemo((s) => s.data.serverOnline);
-  return (
-    <div className="scn-list">
-      {scenarios.map((s) => (
-        <button key={s.id} className={`scn-item ${s.id === scenarioId ? 'on' : ''}`} onClick={() => selectScenario(s.id)}>
-          <span className="scn-num">{s.number}</span>
-          <span className="scn-text">
-            <span className="scn-title">{s.title}</span>
-            <span className="scn-sub">{s.tests}</span>
-          </span>
-        </button>
-      ))}
-      {online === false && scenarios.length === 0 && <div className="pop-note">Inference service offline. Start apps/server to run the live test cases.</div>}
-      <button className={`scn-item scn-preview ${scenarioId === PREVIEW_ID ? 'on' : ''}`} onClick={() => selectScenario(PREVIEW_ID)}>
-        <span className="scn-num">P</span>
-        <span className="scn-text">
-          <span className="scn-title">Presentation preview (offline)</span>
-          <span className="scn-sub">Precomputed six-day script. Not live AI output.</span>
-        </span>
-      </button>
-    </div>
-  );
-}
-
 function SettingsPopover({ onClose }: { onClose: () => void }) {
   const d = useDemo((s) => s.data);
   const dispatch = useDemo((s) => s.dispatch);
@@ -239,18 +251,6 @@ function SettingsPopover({ onClose }: { onClose: () => void }) {
       transition={{ type: 'spring', stiffness: 420, damping: 32 }}
     >
       <div className="pop-row">
-        <span className="pop-k">Mode</span>
-        <Segmented
-          id="pmode"
-          value={d.mode}
-          onChange={(m) => setMode(m)}
-          options={[
-            { value: 'A', label: 'Test cases' },
-            { value: 'B', label: 'Live chat' },
-          ]}
-        />
-      </div>
-      <div className="pop-row">
         <span className="pop-k">Analysis backend</span>
         <Segmented
           id="pbackend"
@@ -264,7 +264,7 @@ function SettingsPopover({ onClose }: { onClose: () => void }) {
       </div>
       <div className="pop-note">
         {d.backend === 'inhouse'
-          ? 'RoBERTa (per message) + Qwen3.5 4B via Ollama (whole conversation) + RAKSHAK fusion, memory and scoring. Runs on this laptop.'
+          ? 'RoBERTa (per message) + Qwen3.5 4B via Ollama (whole conversation) + RAKSHAK fusion, memory and scoring. Runs on the host laptop (127.0.0.1), not on the simulated phones.'
           : 'Your connected ChatGPT account analyses the conversation in the cloud. Runs only when you press “Analyze with ChatGPT”.'}
       </div>
       {d.backend === 'gpt' && <ChatGPTPanel />}
@@ -272,8 +272,6 @@ function SettingsPopover({ onClose }: { onClose: () => void }) {
       {d.mode === 'A' && (
         <>
           <div className="pop-divider" />
-          <div className="pop-k">Test case</div>
-          <ScenarioPicker />
           <div className="pop-row">
             <span className="pop-k">Speed</span>
             <Segmented
@@ -327,14 +325,16 @@ function SettingsPopover({ onClose }: { onClose: () => void }) {
       </div>
 
       <div className="pop-hint">
-        <kbd>Space</kbd> play/pause · <kbd>→</kbd> step · <kbd>E</kbd> engine · <kbd>R</kbd> reset
+        <kbd>Space</kbd> play/pause · <kbd>→</kbd> step · <kbd>S</kbd> studio · <kbd>E</kbd> engine · <kbd>R</kbd> reset
       </div>
     </motion.div>
   );
 }
 
-function Dock({ engineOpen, onToggleEngine }: { engineOpen: boolean; onToggleEngine: () => void }) {
+function Dock({ engineOpen, onToggleEngine, onOpenStudio }: { engineOpen: boolean; onToggleEngine: () => void; onOpenStudio: () => void }) {
   const d = useDemo((s) => s.data);
+  const playable = d.origin === 'scripted' || d.origin === 'preview';
+  const live = canCompose(d.mode, d.origin, d.historyInit);
   const [settings, setSettings] = useState(false);
   const length = scriptLength();
   const finished = length > 0 && d.cursor >= length;
@@ -343,7 +343,7 @@ function Dock({ engineOpen, onToggleEngine }: { engineOpen: boolean; onToggleEng
   const cgReady = !!cg && cg.status === 'connected' && cg.sharing && cg.consent && !!d.chatgpt.model;
 
   const onPlay = () => {
-    if (!d.scenarioId) return setSettings(true);
+    if (!d.scenarioId || !playable) return onOpenStudio();
     if (d.playing) pause();
     else if (finished) {
       void resetDemo().then(() => setTimeout(play, 50));
@@ -354,7 +354,7 @@ function Dock({ engineOpen, onToggleEngine }: { engineOpen: boolean; onToggleEng
     <motion.div className="dock" initial={{ y: 40, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ type: 'spring', stiffness: 260, damping: 28, delay: 0.3 }}>
       <AnimatePresence>{settings && <SettingsPopover onClose={() => setSettings(false)} />}</AnimatePresence>
 
-      {d.mode === 'A' ? (
+      {d.mode === 'A' && playable ? (
         <>
           <button className="dock-play" onClick={onPlay} aria-label={d.playing ? 'Pause' : 'Play'}>
             <AnimatePresence mode="wait" initial={false}>
@@ -367,11 +367,26 @@ function Dock({ engineOpen, onToggleEngine }: { engineOpen: boolean; onToggleEng
             <SkipForward size={16} />
           </button>
           <Progress />
+          {d.origin === 'scripted' && d.cursor > 0 && !d.playing && !finished && (
+            <button className="dock-engine" onClick={() => continueLiveFromHere()} title="Keep the case played so far and continue it live (Mode B)">
+              <History size={14} /> Continue live
+            </button>
+          )}
         </>
       ) : (
-        <div className="dock-live">
-          <span className="live-dot" /> Live chat · type on either phone
-        </div>
+        <button className="dock-live" onClick={live ? undefined : onOpenStudio}>
+          {live ? (
+            <>
+              <span className="live-dot" /> {MODE_META[d.mode].name} · type on either phone
+            </>
+          ) : d.historyInit.status === 'analyzing' || d.historyInit.status === 'loading' ? (
+            'Setting up history… typing resumes when it is ready'
+          ) : (
+            <>
+              <PanelLeftOpen size={14} /> {d.mode === 'A' ? 'Pick an example in the Studio panel' : d.mode === 'B' ? 'Load an earlier conversation in the Studio panel' : 'Start a new conversation in the Studio panel'}
+            </>
+          )}
+        </button>
       )}
 
       {d.backend === 'gpt' && d.scenarioId !== PREVIEW_ID && (
@@ -405,7 +420,7 @@ function Dock({ engineOpen, onToggleEngine }: { engineOpen: boolean; onToggleEng
 
       <div className="dock-sep" />
 
-      <button className="dock-icon" onClick={() => resetDemo()} title="Reset (R): clears this case and its memory">
+      <button className="dock-icon" onClick={() => resetDemo()} disabled={!d.origin} title="Reset (R): restart this case from its own starting point and clear its memory">
         <RotateCcw size={16} />
       </button>
       <button className={`dock-icon dock-settings-btn ${settings ? 'on' : ''}`} onClick={() => setSettings((v) => !v)} title="Settings">
@@ -422,6 +437,12 @@ type DrawerTab = 'case' | 'evidence' | 'trace' | 'models';
 
 function EngineDrawer({ onClose }: { onClose: () => void }) {
   const [tab, setTab] = useState<DrawerTab>('case');
+  useEffect(() => {
+    // A cue clicked in the trace opens the referenced evidence row.
+    const on = () => setTab('evidence');
+    window.addEventListener(EVIDENCE_EVENT, on);
+    return () => window.removeEventListener(EVIDENCE_EVENT, on);
+  }, []);
   const backend = useDemo((s) => s.data.backend);
   const busy = useDemo((s) => !!s.data.analyzingId);
   const hasChats = useDemo((s) => s.data.conversations.length > 0 && s.data.scenarioId !== PREVIEW_ID);
@@ -519,19 +540,47 @@ function StatusPill() {
   );
 }
 
+function ModeSwitch() {
+  const mode = useDemo((s) => s.data.mode);
+  const origin = useDemo((s) => s.data.origin);
+  const title = useDemo((s) => (s.data.origin === 'preview' ? 'Six days, one stranger' : s.data.origin === 'fresh' ? 'New conversation' : s.data.scenarios.find((x) => x.id === s.data.scenarioId)?.title));
+  return (
+    <div className="mode-wrap">
+      <Segmented
+        id="mode-switch"
+        value={mode}
+        onChange={(m: Mode) => setMode(m)}
+        options={(['A', 'B', 'C'] as const).map((m) => ({
+          value: m,
+          label: (
+            <>
+              <span className="mode-letter">{m}</span> {MODE_META[m].name}
+            </>
+          ),
+        }))}
+      />
+      <span className={`origin-chip tone-${origin ? ORIGIN_META[origin].tone : 'none'}`} title="The current case. Switching modes does not change it.">
+        {origin ? `${ORIGIN_META[origin].label}${title ? ` · ${title}` : ''}` : 'No case loaded'}
+      </span>
+    </div>
+  );
+}
+
 export function SimulationPage() {
   const [params] = useSearchParams();
-  const mode = useDemo((s) => s.data.mode);
-  const scenarioTitle = useDemo((s) => (s.data.scenarioId === PREVIEW_ID ? 'Six days, one stranger' : s.data.scenarios.find((x) => x.id === s.data.scenarioId)?.title));
+  const childName = useDemo((s) => childNameOf(s.data));
   const [engineOpen, setEngineOpen] = useState(false);
+  const [studioOpen, setStudioOpen] = useState(true);
+  const [caseStudy, setCaseStudy] = useState<string | null>(null);
   const spot = useSpotlight();
 
-  usePhoneScale(3, engineOpen ? 470 : 0, 205);
+  usePhoneScale(3, (engineOpen ? 470 : 0) + (studioOpen ? 380 : 0), 240);
 
   useEffect(() => {
     const m = params.get('mode');
     const run = async () => {
-      if ((m === 'A' || m === 'B') && m !== useDemo.getState().data.mode) await setMode(m);
+      // A mode in the URL only selects the view; it never resets the case the server holds.
+      if ((m === 'A' || m === 'B' || m === 'C') && m !== useDemo.getState().data.mode) setMode(m);
       await bootstrap();
     };
     void run();
@@ -541,17 +590,19 @@ export function SimulationPage() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if ((e.target as HTMLElement).tagName === 'INPUT') return;
+      const tag = (e.target as HTMLElement).tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || useDemo.getState().data.helpFor) return;
       const d = useDemo.getState().data;
       if (e.code === 'Space' && d.mode === 'A') {
         e.preventDefault();
-        if (!d.scenarioId) return;
+        if (!d.scenarioId || (d.origin !== 'scripted' && d.origin !== 'preview')) return;
         if (d.playing) pause();
         else if (d.cursor >= scriptLength()) {
           void resetDemo().then(() => setTimeout(play, 50));
         } else play();
       } else if (e.key === 'ArrowRight') stepOnce();
       else if (e.key.toLowerCase() === 'e') setEngineOpen((v) => !v);
+      else if (e.key.toLowerCase() === 's') setStudioOpen((v) => !v);
       else if (e.key.toLowerCase() === 'r') void resetDemo();
     };
     window.addEventListener('keydown', onKey);
@@ -572,16 +623,19 @@ export function SimulationPage() {
           </span>
           RAKSHAK
         </Link>
-        <div className="sim-title">
-          {mode === 'A' ? scenarioTitle ?? 'Choose a test case' : 'Live chat'}
-          <span className="sim-title-sub">{mode === 'A' ? 'Test cases · real pipeline' : 'Mode B · unscripted'}</span>
-        </div>
+        <ModeSwitch />
         <StatusPill />
       </header>
 
       <Caption />
 
       <main className="sim-main">
+        <AnimatePresence>{studioOpen && <Studio onClose={() => setStudioOpen(false)} onOpenCaseStudy={setCaseStudy} />}</AnimatePresence>
+        {!studioOpen && (
+          <button className="studio-tab" onClick={() => setStudioOpen(true)} title="Open the Studio panel (S)">
+            <PanelLeftOpen size={15} /> Studio
+          </button>
+        )}
         <motion.div layout className="sim-stage" transition={{ type: 'spring', stiffness: 220, damping: 30 }}>
           <div className={`sim-phone ${cls('predator')}`}>
             <PhoneFrame theme="dark">
@@ -596,7 +650,7 @@ export function SimulationPage() {
               <ChatScreen side="victim" overlay={<NudgeCard />} />
             </PhoneFrame>
             <div className="sim-label">
-              <span className="label-dot dot-teal" /> {CHILD.name}'s phone <span>protected child</span>
+              <span className="label-dot dot-teal" /> {childName}'s phone <span>protected child</span>
             </div>
           </div>
           <div className={`sim-phone ${cls('guardian')}`}>
@@ -610,7 +664,9 @@ export function SimulationPage() {
         <AnimatePresence>{engineOpen && <EngineDrawer onClose={() => setEngineOpen(false)} />}</AnimatePresence>
       </main>
 
-      <Dock engineOpen={engineOpen} onToggleEngine={() => setEngineOpen((v) => !v)} />
+      <Dock engineOpen={engineOpen} onToggleEngine={() => setEngineOpen((v) => !v)} onOpenStudio={() => setStudioOpen(true)} />
+      <GetHelp />
+      <AnimatePresence>{caseStudy && <CaseStudyView caseKey={caseStudy} onClose={() => setCaseStudy(null)} />}</AnimatePresence>
     </div>
   );
 }

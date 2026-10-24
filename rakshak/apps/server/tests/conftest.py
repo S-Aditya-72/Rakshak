@@ -53,6 +53,7 @@ class FakeContextual:
         self.source = source
         self.verdict = verdict
         self.verified: list[dict] = []
+        self.transcripts: list[list[dict]] = []
         self.responder = responder or (lambda ctx: empty())
         self.error = error
         self.calls: list[Context] = []
@@ -68,8 +69,9 @@ class FakeContextual:
             raise self.error
         return RawAnalysis(data=self.responder(ctx), model_id=f"fake-{self.source}", latency_ms=2.0, meta={})
 
-    async def verify(self, claims):
+    async def verify(self, claims, transcript=None):
         self.verified.extend(claims)
+        self.transcripts.append(transcript or [])
         return {c["claim_id"]: (self.verdict, "fake verdict") for c in claims}, 1.0
 
     async def status(self):
@@ -85,11 +87,11 @@ class FakeContextual:
 
 
 def empty(assessment: str = "harmless") -> dict:
-    return {"assessment": assessment, "categories": [], "target_participant_id": None, "findings": [], "retractions": [], "patterns": [], "explanation": "", "uncertain_reason": None}
+    return {"conversation_reading": "test reading", "assessment": assessment, "categories": [], "target_participant_id": None, "findings": [], "retractions": [], "patterns": [], "explanation": "", "uncertain_reason": None}
 
 
 def finding(alias: str, cue: str, target: Optional[str] = "p-meera", modifier: str = "none", confidence: str = "high") -> dict:
-    return {"message_id": alias, "cue": cue, "target_id": target, "modifier": modifier, "confidence": confidence, "rationale": "test"}
+    return {"message_id": alias, "context_basis": "test basis", "cue": cue, "target_id": target, "modifier": modifier, "confidence": confidence, "rationale": "test"}
 
 
 def alias_of(ctx: Context, text_part: str) -> str:

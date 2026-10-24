@@ -79,24 +79,53 @@ export interface ServerState {
   evidence: EvidenceEvent[];
   runs: AnalyzeResponse['result'][];
   snapshots: { day: number; score: number; level: number; stage: string; category: string; runId: string | null }[];
-  alerts: { id: string; backend: BackendId; trackKey: string; level: number; day: number; time: string; title: string; body: string }[];
+  alerts: { id: string; backend: BackendId; trackKey: string; level: number; day: number; time: string; title: string; body: string; historical?: boolean }[];
   alerted: Record<string, number>;
   dismissals: { day: number; trackKey: string | null }[];
   blocks: { contactId: string; day: number }[];
   firstSeen: Record<string, number>;
   scenarioId: string | null;
+  case?: CaseMeta;
+}
+
+export interface CaseMeta {
+  generation: number;
+  scenarioId: string | null;
+  origin: 'scripted' | 'history' | 'fresh' | null;
+  checkpoint: number | null;
+}
+
+export interface Checkpoint {
+  id: string;
+  /** Number of scripted messages in the history (the live conversation starts after this many). */
+  after: number;
+  label: string;
+  intro: string;
+  /** Presenter-only ideas for live messages. Shown in the UI, never sent to a model. */
+  suggestions: string[];
 }
 
 export interface ScenarioView {
   id: string;
   number: number | null;
+  kind: 'core' | 'case_study';
+  caseStudy: string | null;
   title: string;
   subtitle: string;
   tests: string;
+  intro: string;
   child: { id: string; name: string };
   participants: { id: string; name: string; role: 'contact' | 'peer' }[];
   conversations: { id: string; kind: 'private' | 'group'; title: string; participants: string[] }[];
   messages: { id: string; conversationId: string; senderId: string; day: number; time: string; text: string; caption?: string | null }[];
+  checkpoints: Checkpoint[];
+  presenter: string[];
+}
+
+export interface HistoryView extends ScenarioView {
+  checkpoint: Checkpoint;
+  historyMessageIds: string[];
+  reused: boolean;
 }
 
 export const api = {
@@ -104,6 +133,14 @@ export const api = {
   state: (backend: BackendId) => call<ServerState>('GET', `/state?backend=${backend}`),
   scenarios: () => call<ScenarioView[]>('GET', '/scenarios'),
   loadScenario: (id: string) => call<ScenarioView>('POST', `/scenarios/${encodeURIComponent(id)}/load`),
+  loadHistory: (id: string, target: { checkpoint?: string; upto?: number }, force = false) => {
+    const q = new URLSearchParams();
+    if (target.checkpoint) q.set('checkpoint', target.checkpoint);
+    if (target.upto !== undefined) q.set('upto', String(target.upto));
+    if (force) q.set('force', 'true');
+    return call<HistoryView>('POST', `/scenarios/${encodeURIComponent(id)}/history?${q}`);
+  },
+  continueCase: (childId: string) => call<CaseMeta>('POST', `/case/continue?childId=${encodeURIComponent(childId)}`),
   reset: (mode: 'live' | 'empty') => call<{ ok: boolean }>('POST', `/reset?mode=${mode}`),
   addParticipant: (displayName: string, role: 'contact' | 'peer') => call<Participant>('POST', '/participants', { displayName, role }),
   addConversation: (kind: 'private' | 'group', title: string, participantIds: string[]) => call<Conversation>('POST', '/conversations', { kind, title, participantIds }),
@@ -115,7 +152,8 @@ export const api = {
     return parsed.data;
   },
   snapshot: (childId: string, s: unknown) => call('POST', `/cases/${childId}/snapshots`, s),
-  alert: (childId: string, a: unknown) => call<{ created: boolean }>('POST', `/cases/${childId}/alerts`, a),
+  alert: (childId: string, a: { id: string; backend: BackendId; trackKey?: string; level: number; day: number; time: string; title: string; body: string; historical: boolean }) =>
+    call<{ created: boolean }>('POST', `/cases/${childId}/alerts`, a),
   dismissal: (childId: string, d: { day: number; trackKey: string | null }) => call('POST', `/cases/${childId}/dismissals`, d),
   block: (childId: string, b: { contactId: string; day: number }) => call('POST', `/cases/${childId}/blocks`, b),
   chatgpt: {
