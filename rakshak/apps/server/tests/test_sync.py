@@ -128,3 +128,25 @@ def test_connect_info_is_laptop_only(make_client):
     assert info["token"] == TOKEN and info["lan"] is True
     phone = make_client(client=PHONE, access_token=TOKEN)
     assert phone.get("/api/connect-info", headers={"x-rakshak-token": TOKEN}).status_code == 403
+
+
+def test_connect_info_offers_the_tunnel_address(make_client, tmp_path):
+    c = make_client(access_token=TOKEN)
+    assert c.get("/api/connect-info").json()["public"] is None
+    (tmp_path / "public-url").write_text("https://quiet-river-1234.trycloudflare.com\n", encoding="utf-8")
+    info = c.get("/api/connect-info").json()
+    assert info["public"] == "https://quiet-river-1234.trycloudflare.com" and info["lan"] is False
+
+
+def test_tunnel_traffic_needs_the_access_code(make_client):
+    # cloudflared connects from 127.0.0.1 but adds Cf-Connecting-Ip: that is a remote phone, not the laptop.
+    c = make_client(access_token=TOKEN)
+    via_tunnel = {"cf-connecting-ip": "203.0.113.7", "x-forwarded-for": "203.0.113.7"}
+    assert c.get("/api/state", headers=via_tunnel).status_code == 401
+    assert c.get("/api/state", headers={**via_tunnel, "x-rakshak-token": TOKEN}).status_code == 200
+    assert c.get("/api/connect-info", headers={**via_tunnel, "x-rakshak-token": TOKEN}).status_code == 403
+    with pytest.raises(WebSocketDisconnect):
+        with c.websocket_connect("/api/sync", headers=via_tunnel) as ws:
+            ws.send_text(json.dumps({"auth": "wrong", "role": "chat"}))
+            ws.receive_text()
+            ws.receive_text()

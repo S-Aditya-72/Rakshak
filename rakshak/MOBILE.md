@@ -139,15 +139,46 @@ it received, ending with *Chat messages delivered to them: 0*.
 Venue and college Wi-Fi often block devices from reaching each other ("client isolation"). Turn on a **hotspot on a
 spare phone**, connect the laptop and all demo phones to it, restart `npm run server:lan` and use **Connect phones**.
 
-### Testing from far away (a tunnel)
+### Phones in another city (over the internet)
+
+The models run on one laptop (say, a teammate's with the GPU); the phones can be anywhere with internet. Nothing else
+changes: same app, same roles, same buttons, notifications and guardian privacy.
+
+**On the laptop with the models**, once:
 
 ```powershell
-winget install Cloudflare.cloudflared      # once
-cloudflared tunnel --url http://127.0.0.1:8787
+winget install Cloudflare.cloudflared      # macOS: brew install cloudflared
 ```
 
-Enter the printed `https://….trycloudflare.com` link and the access code by hand on the phone. The link is public,
-which is why the access code is required. Stop the tunnel (Ctrl+C) when done.
+then, instead of `npm run server:lan`:
+
+```powershell
+npm run server:remote                      # server + Wi-Fi access + an internet tunnel
+npm run dev                                # second terminal, as usual
+```
+
+After a few seconds it prints `RAKSHAK over the internet · Address: https://….trycloudflare.com` and the access code.
+Open `http://127.0.0.1:5280/#/engine` → **Connect phones**: the first tab, **Over the internet**, is a QR code for that
+address.
+
+**On each phone, wherever it is:** RAKSHAK → **Scan QR code** → point it at the laptop's screen shared in a video call
+(Meet, Discord, WhatsApp video), or at a photo of it → choose the role. No camera? *Enter address and code by hand*
+with the `….trycloudflare.com` address and the code.
+
+**From your own laptop's browser** you can take a role too: run `npm run dev` on your laptop, open
+`http://127.0.0.1:5280/#/app` → *Enter address and code by hand* → the tunnel address and code → pick a role. The
+laptop with the models still drives the demo (modes, Studio, Reset); share its `/#/engine` screen to watch the engine.
+
+How it works and what to know:
+
+- The tunnel is a Cloudflare *quick tunnel*: no account, encrypted (`https`), and a **new address every time** the
+  server starts. Phones that joined before a restart must scan again.
+- The address is public, so the **access code is always required** for anything coming through it (the server treats
+  tunnelled requests as remote even though they arrive from 127.0.0.1). The engine-only views (Connect phones,
+  Devices) and the ChatGPT backend stay usable only on that laptop. Don't post the QR or the code publicly; stop the
+  server (Ctrl+C) when done and the tunnel closes with it.
+- Expect each analysed message to take a second or two longer than on Wi-Fi.
+- If the address never appears, the laptop's network may block Cloudflare tunnels: try a phone hotspot.
 
 ## Notifications: what to expect
 

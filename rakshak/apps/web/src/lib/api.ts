@@ -215,7 +215,7 @@ export const api = {
     list: () => call<{ guardians: import('./sync').GuardianView[] }>('GET', '/guardians'),
     revoke: (id: string) => call<{ ok: boolean }>('POST', `/guardians/${encodeURIComponent(id)}/revoke`, {}),
   },
-  connectInfo: () => call<{ addresses: string[]; port: number; token: string; lan: boolean }>('GET', '/connect-info'),
+  connectInfo: () => call<{ addresses: string[]; port: number; token: string; lan: boolean; public: string | null }>('GET', '/connect-info'),
   syncPeers: () => call<{ peers: { id: string; role: 'chat' | 'guardian' | 'temp'; name: string; addr: string; scope: string; audience: string; connectedAt: number; frames: number; bytes: number; recent: string[] }[]; blockedFrames: number }>('GET', '/sync/peers', undefined, 4000),
   chatgpt: {
     status: () => call<ChatGPTStatus>('GET', '/chatgpt/status', undefined, 6000),

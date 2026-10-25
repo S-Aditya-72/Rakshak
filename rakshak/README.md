@@ -109,6 +109,11 @@ npm run server:lan
 4. Laptop: **C · Free Chat** → Studio → *Start new conversation*, then type on Kabir's phone. Meera gets nudges, Amma
    gets notifications.
 
+**Phones somewhere else** (teammates in another city): install `cloudflared` once
+(`winget install Cloudflare.cloudflared`) and start the server with `npm run server:remote` instead. Connect phones
+then shows an *Over the internet* QR code that works from anywhere; scan it off a shared screen. Details:
+[MOBILE.md → Phones in another city](MOBILE.md#phones-in-another-city-over-the-internet).
+
 **6. After pulling new code later:** run `npm install` again, restart both terminals, and reinstall the APK on the
 phones if `apk/RAKSHAK-debug.apk` changed. Rebuilding the APK yourself (`npm run apk`) needs Android Studio and is only
 needed after changing the web code.
@@ -202,7 +207,8 @@ npm run dev                  # web UI on http://127.0.0.1:5280
 npm run companion            # optional: ChatGPT backend (see §6)
 ```
 
-**Phones / the Android app:** run `npm run server:lan` instead of `npm run server`. It listens on the network and
+**Phones / the Android app:** run `npm run server:lan` instead of `npm run server` (or `npm run server:remote` for
+phones on other networks: the same plus a Cloudflare quick tunnel, see [MOBILE.md](MOBILE.md)). It listens on the network and
 prints the server address(es) and an access code (saved in `data/access-token`, so it survives restarts). The easiest
 way to give both to a phone is the QR code under **Connect phones** on `/#/engine` (the app also accepts them typed in).
 Requests from this laptop never need the code; requests from anywhere else (Wi-Fi, or a

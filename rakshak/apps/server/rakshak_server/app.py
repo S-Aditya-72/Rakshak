@@ -13,6 +13,7 @@ import socket
 import time
 import uuid
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Optional
 
 from urllib.parse import urlsplit
@@ -60,6 +61,15 @@ def lan_addresses() -> list[str]:
     except OSError:
         pass
     return found
+
+
+def public_url(data_dir: Path) -> Optional[str]:
+    """The tunnel's internet address, written by `npm run server:remote` while the tunnel is up."""
+    try:
+        url = (data_dir / "public-url").read_text(encoding="utf-8").strip()
+    except OSError:
+        return None
+    return url if url.startswith("https://") else None
 
 
 def is_local(request: HTTPConnection) -> bool:
@@ -365,7 +375,14 @@ def create_app(settings: Optional[Settings] = None, *, roberta: Optional[Roberta
     def connect_info(request: Request):
         """Addresses and access code for the connect QR code shown on the laptop."""
         require_laptop(request)
-        return {"addresses": lan_addresses() if s.host in ("0.0.0.0", "::") else [], "port": s.port, "token": s.access_token, "lan": s.host in ("0.0.0.0", "::")}
+        return {
+            "addresses": lan_addresses() if s.host in ("0.0.0.0", "::") else [],
+            "port": s.port,
+            "token": s.access_token,
+            "lan": s.host in ("0.0.0.0", "::"),
+            # Internet address of a tunnel to this server (`npm run server:remote` writes it), or None.
+            "public": public_url(s.data_dir) if s.access_token else None,
+        }
 
     # ---------- temporary guardians ----------
 

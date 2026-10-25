@@ -97,9 +97,20 @@ export function ConnectPhones({ onClose }: { onClose: () => void }) {
   const [err, setErr] = useState(false);
   const [pick, setPick] = useState(0);
   useEffect(() => {
-    api.connectInfo().then(setInfo, () => setErr(true));
+    const load = () => api.connectInfo().then(setInfo, () => setErr(true));
+    load();
+    // The tunnel address appears a few seconds after `npm run server:remote` starts.
+    const t = setInterval(load, 4000);
+    return () => clearInterval(t);
   }, []);
-  const addr = info?.addresses[pick];
+  // Ways a phone can reach this server: the internet tunnel first (works from anywhere), then this laptop's Wi-Fi.
+  const targets = info
+    ? [
+        ...(info.public ? [{ key: 'net', label: 'Over the internet', url: info.public, shown: info.public.replace(/^https:\/\//, '') }] : []),
+        ...(info.lan ? info.addresses.map((a) => ({ key: a, label: `Wi-Fi · ${a}`, url: `http://${a}:${info.port}`, shown: a })) : []),
+      ]
+    : [];
+  const target = targets[Math.min(pick, targets.length - 1)];
 
   return (
     <motion.div className="connect-scrim" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose}>
@@ -111,31 +122,40 @@ export function ConnectPhones({ onClose }: { onClose: () => void }) {
           <QrCode size={18} /> Connect phones
         </div>
         {err && <p className="connect-text">The RAKSHAK server is not running on this laptop.</p>}
-        {info && !info.lan && (
+        {info && targets.length === 0 && (
           <p className="connect-text">
-            Phones can't reach this server yet. Stop it and start it with <code>npm run server:lan</code>.
+            {info.lan ? (
+              'No Wi-Fi address found. Connect this laptop to the hotspot first, or start the server with npm run server:remote for phones elsewhere.'
+            ) : (
+              <>
+                Phones can't reach this server yet. Stop it and start it with <code>npm run server:lan</code> (same Wi-Fi) or <code>npm run server:remote</code> (phones anywhere).
+              </>
+            )}
           </p>
         )}
-        {info?.lan && info.addresses.length === 0 && <p className="connect-text">No Wi-Fi address found. Connect this laptop to the hotspot first.</p>}
-        {info?.lan && addr && (
+        {target && (
           <>
-            <p className="connect-text">On each phone: RAKSHAK → Scan QR code. Phones must be on the same Wi-Fi or hotspot as this laptop.</p>
-            {info.addresses.length > 1 && (
+            <p className="connect-text">
+              On each phone: RAKSHAK → Scan QR code.{' '}
+              {target.key === 'net' ? 'Works from anywhere with internet: share this screen in a call and scan it, or send a photo of it.' : 'Phones must be on the same Wi-Fi or hotspot as this laptop.'}
+            </p>
+            {targets.length > 1 && (
               <div className="connect-tabs">
-                {info.addresses.map((a, i) => (
-                  <button key={a} className={i === pick ? 'on' : ''} onClick={() => setPick(i)}>
-                    {a}
+                {targets.map((t, i) => (
+                  <button key={t.key} className={t === target ? 'on' : ''} onClick={() => setPick(i)}>
+                    {t.label}
                   </button>
                 ))}
               </div>
             )}
             <div className="connect-qr">
-              <QrImage text={encodePairing({ kind: 'connect', url: `http://${addr}:${info.port}`, token: info.token })} size={260} />
+              <QrImage text={encodePairing({ kind: 'connect', url: target.url, token: info!.token })} size={260} />
             </div>
             <div className="connect-manual">
-              Or type: <b>{addr}</b> · code <b>{info.token}</b>
+              Or type: <b>{target.shown}</b> · code <b>{info!.token}</b>
             </div>
-            {info.addresses.length > 1 && <p className="connect-hint">Two networks found. If a phone can't connect, try the other address.</p>}
+            {target.key === 'net' && <p className="connect-hint">The internet address changes each time the server starts. Phones that joined earlier need to scan again.</p>}
+            {target.key !== 'net' && info!.addresses.length > 1 && <p className="connect-hint">Two networks found. If a phone can't connect, try the other address.</p>}
           </>
         )}
         <p className="connect-hint">

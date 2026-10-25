@@ -17,6 +17,7 @@
     "companion": "npm --prefix apps/siwc-companion start",
     "server": "node scripts/start-server.mjs",
     "server:lan": "node scripts/start-server.mjs --lan",
+    "server:remote": "node scripts/start-server.mjs --lan --tunnel",
     "apk": "node scripts/build-apk.mjs",
     "e2e": "node scripts/e2e-browser.mjs",
     "setup:siwc": "node scripts/setup-siwc.mjs"
