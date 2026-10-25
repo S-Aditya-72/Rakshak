@@ -1,7 +1,7 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import { BellRing, ChevronRight, Keyboard, MessageCircle, PlayCircle, QrCode, ShieldCheck, UserRound, Users } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { ServerSettings } from '../console/ServerSettings';
 import { CHILD, GUARDIAN } from '../data/meta';
 import { api, setServer } from '../lib/api';
@@ -9,7 +9,7 @@ import { setActiveRole, setDevice, useDevice, type DeviceRole } from '../lib/dev
 import { enableNotifications, keepAwake, onBack, setBarStyle } from '../lib/native';
 import { unlockAudio } from '../lib/sounds';
 import { useSync } from '../lib/sync';
-import { decodePairing, type Pairing } from '../qr/pairing';
+import { decodePairing, pairingFromLocation, type Pairing } from '../qr/pairing';
 import { QrScanner } from '../qr/QrScanner';
 import { play, PREVIEW_ID, refreshHealth, resetForRole, selectScenario, setMode, setViewer } from '../store';
 import { ChatApp } from './ChatApp';
@@ -24,8 +24,22 @@ const ROLES: { role: Exclude<Role, 'temp'>; title: string; sub: string; icon: Re
 ];
 
 /** First screen of the Android app: connect to the server laptop (scan its QR), then choose who uses this phone. */
+/**
+ * A scanned join link opened in the phone's browser (no RAKSHAK app): hand it to the setup screen exactly as the app's
+ * own scanner would, and drop the code from the address bar.
+ */
+export function JoinLink() {
+  const navigate = useNavigate();
+  useEffect(() => {
+    const p = pairingFromLocation();
+    navigate('/app', { replace: true, state: p ? { pairing: p } : null });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  return null;
+}
+
 export function MobileHome() {
   const navigate = useNavigate();
+  const location = useLocation();
   const sync = useSync();
   const live = sync.state === 'live';
   const [scanning, setScanning] = useState(false);
@@ -54,7 +68,10 @@ export function MobileHome() {
 
   const onScan = (text: string) => {
     setScanning(false);
-    const p = decodePairing(text);
+    applyPairing(decodePairing(text));
+  };
+
+  const applyPairing = (p: Pairing | null) => {
     if (!p) return setNote("That QR code isn't a RAKSHAK code.");
     if (p.kind === 'connect') {
       setServer({ url: p.url, token: p.token });
@@ -64,6 +81,14 @@ export function MobileHome() {
       setNote('That invite has expired. Ask for a new one.');
     } else setInvite(p);
   };
+
+  // Opened from a join link in the browser (see JoinLink).
+  useEffect(() => {
+    const p = (location.state as { pairing?: Pairing } | null)?.pairing;
+    if (!p) return;
+    applyPairing(p);
+    navigate('/app', { replace: true, state: null });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Offline fallback: this phone plays the labelled presentation preview on its own, without any server.
   const offlineDemo = async () => {

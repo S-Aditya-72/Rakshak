@@ -83,3 +83,22 @@ def test_cors_allows_the_web_app_on_another_laptop(make_client):
     assert c.options("/api/health", headers={"origin": "http://localhost:5280", **pre}).headers.get("access-control-allow-origin") == "http://localhost:5280"
     assert c.options("/api/health", headers={"origin": "https://localhost", **pre}).headers.get("access-control-allow-origin") == "https://localhost"
     assert "access-control-allow-origin" not in c.options("/api/health", headers={"origin": "https://evil.example", **pre}).headers
+
+
+def test_server_serves_the_phone_app_for_browsers(make_client, tmp_path):
+    # A phone without the RAKSHAK app opens the join link in its browser: the page comes from this server, the data
+    # still needs the access code.
+    web = tmp_path / "web"
+    web.mkdir()
+    (web / "index.html").write_text("<!doctype html><title>RAKSHAK</title>", encoding="utf-8")
+    (web / "notify-sw.js").write_text("// sw", encoding="utf-8")
+    phone = make_client(client=PHONE, access_token="abcd-efgh-jkmn", web_dir=web)
+    assert "RAKSHAK" in phone.get("/").text
+    assert phone.get("/notify-sw.js").status_code == 200
+    assert phone.get("/api/state").status_code == 401
+    assert phone.get("/api/state", headers={"x-rakshak-token": "abcd-efgh-jkmn"}).status_code == 200
+
+
+def test_no_web_app_without_a_build(make_client, tmp_path):
+    c = make_client(web_dir=tmp_path / "missing")
+    assert c.get("/").status_code == 404

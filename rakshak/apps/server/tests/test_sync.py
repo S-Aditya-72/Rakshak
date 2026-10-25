@@ -150,3 +150,15 @@ def test_tunnel_traffic_needs_the_access_code(make_client):
             ws.send_text(json.dumps({"auth": "wrong", "role": "chat"}))
             ws.receive_text()
             ws.receive_text()
+
+
+def test_the_served_phone_app_may_open_the_relay(make_client):
+    # A join link opened in a phone browser: the page and the socket share the tunnel's origin.
+    c = make_client(access_token=TOKEN)
+    host = "quiet-river-1234.trycloudflare.com"
+    tunnel = {"host": host, "origin": f"https://{host}", "cf-connecting-ip": "203.0.113.7"}
+    with c.websocket_connect("/api/sync", headers=tunnel) as ws:
+        assert join(ws, auth=TOKEN)["peers"] == 1
+    with pytest.raises(WebSocketDisconnect):
+        with c.websocket_connect("/api/sync", headers={**tunnel, "origin": "https://evil.example"}) as ws:
+            join(ws, auth=TOKEN)

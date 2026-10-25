@@ -136,8 +136,10 @@ export function ConnectPhones({ onClose }: { onClose: () => void }) {
         {target && (
           <>
             <p className="connect-text">
-              On each phone: RAKSHAK → Scan QR code.{' '}
-              {target.key === 'net' ? 'Works from anywhere with internet: share this screen in a call and scan it, or send a photo of it.' : 'Phones must be on the same Wi-Fi or hotspot as this laptop.'}
+              Scan with the phone's camera (RAKSHAK opens in the browser, no app needed) or in the RAKSHAK app → Scan QR code.{' '}
+              {target.key === 'net'
+                ? 'Works from anywhere with internet: share this screen in a call and scan it, or send a photo of it.'
+                : 'Phones must be on the same Wi-Fi or hotspot as this laptop. In a browser over Wi-Fi, notifications and the camera need the app (or the internet tab).'}
             </p>
             {targets.length > 1 && (
               <div className="connect-tabs">

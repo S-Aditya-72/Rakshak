@@ -18,6 +18,8 @@ class Settings:
     host: str = field(default_factory=lambda: _env("HOST", "127.0.0.1"))
     port: int = field(default_factory=lambda: int(_env("PORT", "8787")))
     data_dir: Path = field(default_factory=lambda: Path(_env("DATA_DIR", str(REPO_ROOT / "data"))))
+    # The built web app (npm run build), served at / so a phone's browser can open the phone app from a join link.
+    web_dir: Path = field(default_factory=lambda: Path(_env("WEB_DIR", str(REPO_ROOT / "apps" / "web" / "dist"))))
     prompts_dir: Path = field(default_factory=lambda: REPO_ROOT / "prompts")
     scenarios_dir: Path = field(default_factory=lambda: REPO_ROOT / "scenarios")
 

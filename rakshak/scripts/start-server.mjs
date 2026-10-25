@@ -2,7 +2,9 @@
 // Offline by default after setup: HF_HUB_OFFLINE=1 unless RAKSHAK_ALLOW_DOWNLOAD=1.
 // --lan: listen on the network for the Android app, with an access code kept in data/access-token.
 // --tunnel: also reachable over the internet through a Cloudflare quick tunnel (phones anywhere), with the same code.
-import { spawn } from 'node:child_process';
+// With either, the web app is built first and served by the server too: a phone without the RAKSHAK app scans the
+// connect QR with its camera and gets the same app in its browser (RAKSHAK_SKIP_WEB_BUILD=1 skips the build).
+import { spawn, spawnSync } from 'node:child_process';
 import { randomInt } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { networkInterfaces } from 'node:os';
@@ -37,6 +39,12 @@ if (lan) {
   console.log(`    Access code:    ${env.RAKSHAK_ACCESS_TOKEN}`);
   console.log('  Phones must be on the same Wi-Fi/hotspot. On Windows, allow Python through the firewall');
   console.log('  for Private networks when asked. Phones elsewhere: npm run server:remote\n');
+}
+
+if ((lan || tunnel) && !process.argv.includes('--test') && process.env.RAKSHAK_SKIP_WEB_BUILD !== '1') {
+  console.log('  Building the web app for phone browsers (about 15 s)…');
+  const b = spawnSync('npm', ['run', 'build', '-w', '@rakshak/web'], { cwd: root, stdio: ['ignore', 'ignore', 'inherit'], shell: process.platform === 'win32' });
+  console.log(b.status === 0 ? '  Web app ready: phones without the RAKSHAK app can open it from the QR code.' : '  The web app did not build; phones can still use the RAKSHAK app.');
 }
 
 const args = process.argv.includes('--test') ? ['-m', 'pytest', '-q', 'tests'] : ['-m', 'rakshak_server'];
@@ -76,7 +84,8 @@ function startTunnel() {
     console.log(`    Address:     ${m[0]}`);
     console.log(`    Access code: ${env.RAKSHAK_ACCESS_TOKEN}`);
     console.log('  Phones anywhere: open http://127.0.0.1:5280/#/engine on this laptop → Connect phones → scan the QR');
-    console.log('  (share the screen in a call, or send a photo of it). The address changes every time this starts.\n');
+    console.log('  (share the screen in a call, or send a photo of it) with the phone camera, or the RAKSHAK app.');
+    console.log('  The address changes every time this starts.\n');
   };
   cf.stdout.on('data', read);
   cf.stderr.on('data', read);

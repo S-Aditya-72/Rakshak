@@ -10,7 +10,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { HashRouter, Route, Routes } from 'react-router-dom';
 import { isNative } from './lib/native';
-import { MobileHome, RoleScreen } from './mobile/MobileApp';
+import { JoinLink, MobileHome, RoleScreen } from './mobile/MobileApp';
 import { LandingPage } from './pages/Landing';
 import { EnginePage } from './pages/Engine';
 import { ConsolePage, SinglePhonePage } from './pages/Pages';
@@ -36,6 +36,7 @@ createRoot(document.getElementById('root')!).render(
         <Route path="/console" element={<ConsolePage />} />
         <Route path="/engine" element={<EnginePage />} />
         <Route path="/app" element={<MobileHome />} />
+        <Route path="/join" element={<JoinLink />} />
         <Route path="/m/child" element={<RoleScreen role="child" />} />
         <Route path="/m/guardian" element={<RoleScreen role="guardian" />} />
         <Route path="/m/contact" element={<RoleScreen role="contact" />} />

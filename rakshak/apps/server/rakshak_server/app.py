@@ -22,6 +22,7 @@ from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconn
 from pydantic import BaseModel, Field
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 from starlette.requests import HTTPConnection
 
 from .analyzers import AnalyzerError, ChatGPTAnalyzer, QwenAnalyzer
@@ -324,7 +325,11 @@ def create_app(settings: Optional[Settings] = None, *, roberta: Optional[Roberta
         origin = ws.headers.get("origin")
         if not origin or origin in s.cors_origins:
             return True
-        return urlsplit(origin).hostname in LOOPBACK  # the laptop's own dev server, on any port
+        parts = urlsplit(origin)
+        # The phone app this server serves itself (a join link opened in a browser, through the tunnel or Wi-Fi).
+        if parts.netloc and parts.netloc == ws.headers.get("host", ""):
+            return True
+        return parts.hostname in LOOPBACK  # the laptop's own dev server, on any port
 
     @app.websocket("/api/sync")
     async def sync(ws: WebSocket):
@@ -445,6 +450,11 @@ def create_app(settings: Optional[Settings] = None, *, roberta: Optional[Roberta
         body = await request.json()
         pipe.chatgpt_consent = time.time() if body.get("accepted") else None
         return {"consent": bool(pipe.chatgpt_consent)}
+
+    # Last, so every /api route above wins: the phone app for browsers (join links from the connect QR code). Static
+    # files only; anything with data stays behind /api and the access code.
+    if (s.web_dir / "index.html").is_file():
+        app.mount("/", StaticFiles(directory=s.web_dir, html=True), name="web")
 
     return app
 

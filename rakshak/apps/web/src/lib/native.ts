@@ -1,4 +1,6 @@
-// Phone-only extras for the Android app (Capacitor). Every function is a safe no-op in a desktop browser.
+// Phone-only extras for the Android app (Capacitor). In a browser (the phone app opened from a join link, without the
+// RAKSHAK app) they fall back to web APIs where those exist: notifications through a service worker, the screen wake
+// lock, the dialer through tel: links. Everything else is a safe no-op.
 
 import { KeepAwake } from '@capacitor-community/keep-awake';
 import { App } from '@capacitor/app';
@@ -7,6 +9,8 @@ import { Haptics, ImpactStyle, NotificationType } from '@capacitor/haptics';
 import { LocalNotifications } from '@capacitor/local-notifications';
 
 export const isNative = Capacitor.isNativePlatform();
+/** A phone or tablet browser (tel: links open the dialer there, unlike on a laptop). */
+const mobileBrowser = !isNative && typeof navigator !== 'undefined' && /Android|iPhone|iPad|Mobile/i.test(navigator.userAgent);
 
 /** Vibration that matches the alert level: a tap for a nudge, a warning for L2, a long siren-like pattern for L3. */
 export function buzz(level: 1 | 2 | 3) {
@@ -21,9 +25,30 @@ export function buzz(level: 1 | 2 | 3) {
 
 /** Keeps a waiting phone (e.g. the guardian's) from locking mid-demo, which would also drop the sync connection. */
 export function keepAwake(on: boolean) {
-  if (!isNative) return;
+  if (!isNative) return webWakeLock(on);
   void (on ? KeepAwake.keepAwake() : KeepAwake.allowSleep()).catch(() => {});
 }
+
+// Browsers release the wake lock whenever the tab is hidden, so it is taken again when the tab comes back.
+let wakeWanted = false;
+let wakeLock: { release(): Promise<void> } | null = null;
+function webWakeLock(on: boolean) {
+  const wl = (navigator as Navigator & { wakeLock?: { request(t: 'screen'): Promise<{ release(): Promise<void> }> } }).wakeLock;
+  if (!wl) return;
+  wakeWanted = on;
+  if (!on) {
+    void wakeLock?.release().catch(() => {});
+    wakeLock = null;
+    return;
+  }
+  const take = () => void wl.request('screen').then((l) => (wakeLock = l), () => {});
+  take();
+  if (!wakeListening) {
+    wakeListening = true;
+    document.addEventListener('visibilitychange', () => wakeWanted && document.visibilityState === 'visible' && take());
+  }
+}
+let wakeListening = false;
 
 /**
  * Opens a phone number or website outside the app. On Android, Capacitor hands non-app URLs to the system, so `tel:`
@@ -35,7 +60,11 @@ export function openExternal(url: string): boolean {
     window.location.href = url;
     return true;
   }
-  if (url.startsWith('tel:')) return false;
+  if (url.startsWith('tel:')) {
+    if (!mobileBrowser) return false;
+    window.location.href = url;
+    return true;
+  }
   window.open(url, '_blank', 'noopener');
   return true;
 }
@@ -64,7 +93,7 @@ let channelReady: Promise<boolean> | null = null;
 
 /** Creates the high-importance channel and asks for permission (Android 13+). Call from a tap, e.g. role setup. */
 export function enableNotifications(): Promise<boolean> {
-  if (!isNative) return Promise.resolve(false);
+  if (!isNative) return webNotifications();
   channelReady ??= (async () => {
     try {
       await LocalNotifications.createChannel({ id: CHANNEL, name: 'Safety alerts', description: 'RAKSHAK alerts about the child you look after', importance: 5, visibility: 1, vibration: true, lights: true, lightColor: '#FF3B30' });
@@ -86,6 +115,7 @@ const intId = (key: string) => {
 
 /** Shows one notification. `key` de-duplicates: the same alert never notifies twice. */
 export async function notify(key: string, title: string, body: string, extra: Record<string, string> = {}) {
+  if (!isNative) return webNotify(key, title, body, extra);
   if (!(await enableNotifications())) return;
   try {
     await LocalNotifications.schedule({
@@ -99,9 +129,41 @@ export async function notify(key: string, title: string, body: string, extra: Re
 
 /** Runs when a notification is tapped (with its `extra`). */
 export function onNotificationTap(fn: (extra: Record<string, string>) => void): () => void {
-  if (!isNative) return () => {};
+  if (!isNative) {
+    if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return () => {};
+    const h = (e: MessageEvent) => e.data?.type === 'rakshak-notification-tap' && fn(e.data.extra ?? {});
+    navigator.serviceWorker.addEventListener('message', h);
+    return () => navigator.serviceWorker.removeEventListener('message', h);
+  }
   const h = LocalNotifications.addListener('localNotificationActionPerformed', (e) => fn((e.notification.extra ?? {}) as Record<string, string>));
   return () => void h.then((x) => x.remove());
+}
+
+// Browser version: notifications go through public/notify-sw.js (Android browsers have no plain `new Notification`).
+// Needs a secure page (https, as through the internet tunnel, or localhost). The permission prompt is asked first so
+// it still counts as part of the tap that called enableNotifications().
+let webReady: Promise<ServiceWorkerRegistration | null> | null = null;
+
+function webNotifications(): Promise<boolean> {
+  if (typeof window === 'undefined' || !('Notification' in window) || !('serviceWorker' in navigator) || !window.isSecureContext) return Promise.resolve(false);
+  const asked = Notification.permission === 'default' ? Notification.requestPermission() : Promise.resolve(Notification.permission);
+  webReady ??= navigator.serviceWorker
+    .register('/notify-sw.js')
+    .then(() => navigator.serviceWorker.ready)
+    .catch(() => null);
+  return Promise.all([asked, webReady]).then(([perm, reg]) => perm === 'granted' && !!reg);
+}
+
+async function webNotify(key: string, title: string, body: string, extra: Record<string, string>) {
+  if (typeof window === 'undefined' || !('Notification' in window)) return;
+  // Not asked yet (e.g. "Send a test notification"): ask now, while this still runs inside the tap.
+  if (!(Notification.permission === 'granted' || (Notification.permission === 'default' && (await webNotifications())))) return;
+  const reg = await (webReady ?? (webNotifications(), webReady));
+  try {
+    await reg?.showNotification(title, { body, tag: key, data: extra, requireInteraction: extra.alertId !== undefined } as NotificationOptions);
+  } catch {
+    /* notifications unavailable */
+  }
 }
 
 // ---------- system bars and the back button ----------
