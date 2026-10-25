@@ -16,3 +16,7 @@ apps/web/brag-output/work/frames/
 apps/web/brag-output/work/stills/
 apps/web/brag-output/work/chrome-profile/
 *.wav
+
+# Android app build output (npm run apk): only the finished APK is committed, so phones can install it from GitHub
+/apk/*
+!/apk/RAKSHAK-debug.apk

@@ -44,7 +44,8 @@ export interface Analysis {
 
 export interface ChatMessage {
   id: string;
-  kind: 'msg' | 'day';
+  /** 'system' rows are notes such as "You blocked Kabir", shown on this case's phones only. */
+  kind: 'msg' | 'day' | 'system';
   from?: Side;
   /** Conversation this row belongs to. */
   conversationId?: string;
@@ -54,6 +55,10 @@ export interface ChatMessage {
   day: number;
   time: string;
   analysis?: Analysis;
+  /** Sent by a blocked contact: shown on their phone as not delivered, never to the child. */
+  undelivered?: boolean;
+  /** A photo from the demo gallery (key into data/gallery.ts). Never a real photo from the phone. */
+  image?: string;
 }
 
 export interface AlertItem {
@@ -81,6 +86,30 @@ export interface AlertItem {
   /** The evidence behind this alert was retracted on a fuller reading of the chat. Shown as withdrawn, never deleted. */
   withdrawn?: boolean;
   withdrawnReason?: string;
+  /** Contact behind a grooming track (for "Block contact"). */
+  contactId?: string;
+}
+
+/** Something a person did in response to an alert. Mirrored to every device like any other action. */
+export type ResponseKind = 'child_help' | 'child_sos' | 'child_block' | 'child_photo_held' | 'child_photo_sent' | 'guardian_talk' | 'guardian_block' | 'guardian_counsellor' | 'guardian_trusted' | 'guardian_call' | 'report_done';
+
+export interface CaseResponse {
+  id: string;
+  kind: ResponseKind;
+  by: 'child' | 'guardian';
+  label: string;
+  day: number;
+  time: string;
+  alertId?: string;
+}
+
+/** A message one phone sends to another through RAKSHAK (help request, SOS, guardian check-in). */
+export interface Notice {
+  id: string;
+  tone: 'calm' | 'warn' | 'urgent';
+  title: string;
+  body: string;
+  time: string;
 }
 
 export interface ParticipantView {

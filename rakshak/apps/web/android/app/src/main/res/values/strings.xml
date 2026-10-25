@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">RAKSHAK</string>
+    <string name="title_activity_main">RAKSHAK</string>
+    <string name="package_name">com.githappens.rakshak</string>
+    <string name="custom_url_scheme">com.githappens.rakshak</string>
+</resources>

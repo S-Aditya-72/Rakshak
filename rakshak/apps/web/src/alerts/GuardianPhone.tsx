@@ -2,9 +2,11 @@ import { AnimatePresence, LayoutGroup, motion } from 'framer-motion';
 import { ShieldCheck } from 'lucide-react';
 import { useEffect } from 'react';
 import { PhoneFrame, StatusBar } from '../chat/PhoneFrame';
+import { useClock } from '../lib/hooks';
+import { buzz } from '../lib/native';
 import { playChime, playCritical } from '../lib/sounds';
 import { childNameOf, useDemo } from '../store';
-import { AlertSheet, CriticalTakeover, GuardianBanner, NotificationCard } from './GuardianAlerts';
+import { AlertSheet, CriticalTakeover, GuardianBanner, NoticeBanner, NotificationCard } from './GuardianAlerts';
 
 /** The guardian's phone: lock screen + alert history + L2 banner / sheet + L3 takeover. */
 export function GuardianPhone() {
@@ -13,14 +15,20 @@ export function GuardianPhone() {
   const sheet = useDemo((s) => s.data.guardianSheet);
   const critical = useDemo((s) => s.data.critical);
   const sound = useDemo((s) => s.data.sound);
+  const notice = useDemo((s) => s.data.guardianNotice);
+  const clock = useClock();
   const child = useDemo((s) => childNameOf(s.data));
 
   useEffect(() => {
-    if (banner && sound) playChime();
+    if (!banner) return;
+    buzz(2);
+    if (sound) playChime();
   }, [banner?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    if (critical && sound) playCritical();
+    if (!critical) return;
+    buzz(3);
+    if (sound) playCritical();
   }, [critical?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const history = alerts
@@ -34,8 +42,8 @@ export function GuardianPhone() {
         <div className="lock-wallpaper" />
         <StatusBar />
         <div className="lock-clock">
-          <div className="lock-date">Monday 23 October</div>
-          <div className="lock-time">9:41</div>
+          <div className="lock-date">{clock.date}</div>
+          <div className="lock-time">{clock.time}</div>
         </div>
 
         <LayoutGroup>
@@ -56,7 +64,7 @@ export function GuardianPhone() {
             ))}
           </div>
 
-          <AnimatePresence>{banner && <GuardianBanner key={banner.id} alert={banner} />}</AnimatePresence>
+          <AnimatePresence>{banner ? <GuardianBanner key={banner.id} alert={banner} /> : notice && <NoticeBanner key={notice.id} notice={notice} />}</AnimatePresence>
           <AnimatePresence>{sheet && <AlertSheet key={sheet.id} alert={sheet} />}</AnimatePresence>
         </LayoutGroup>
 

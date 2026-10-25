@@ -3,7 +3,7 @@ import { Activity, AlertTriangle, BrainCircuit, Cloud, Cpu, Database, Eye, Link2
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { CueChip, NeonBadge, ScoreRing, StageStepper } from '../alerts/primitives';
 import { BACKEND_META, HALF_LIFE_DAYS, LEVEL_META, SCORE_MAX, THRESHOLDS } from '../data/meta';
-import { trackLabel } from '../lib/case';
+import { contextualLabel, trackLabel } from '../lib/case';
 import { PREVIEW_ID, useDemo } from '../store';
 import type { Level } from '../types';
 
@@ -112,6 +112,21 @@ export function CaseCard() {
               <span className="track-name">{trackLabel(t, names.person)}</span>
               <span className="track-score">
                 {t.score.toFixed(1)} · L{t.level}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {d.responses.length > 0 && (
+        <div className="tracks">
+          <div className="track-k">Responses (buttons pressed on the phones)</div>
+          {d.responses.slice(-5).map((r) => (
+            <div key={r.id} className="track-row">
+              <span className="track-dot" style={{ background: r.by === 'child' ? '#0a84ff' : '#ff9f0a' }} />
+              <span className="track-name">{r.label}</span>
+              <span className="track-score">
+                D{r.day} {r.time}
               </span>
             </div>
           ))}
@@ -527,7 +542,7 @@ export function ModelsPanel() {
               <span>Latency</span>
               <span>
                 total {Math.round(run.latency.totalMs)} ms{run.latency.robertaMs != null ? ` · RoBERTa ${Math.round(run.latency.robertaMs)} ms` : ''}
-                {run.latency.contextualMs != null ? ` · ${run.backend === 'local_hybrid' ? 'Qwen' : 'ChatGPT'} ${Math.round(run.latency.contextualMs)} ms` : ''} (measured)
+                {run.latency.contextualMs != null ? ` · ${contextualLabel(run)} ${Math.round(run.latency.contextualMs)} ms` : ''} (measured)
               </span>
               <span>Context</span>
               <span>
@@ -555,7 +570,7 @@ export function ModelsPanel() {
                 ))}
               </>
             )}
-            <div className="mdl-k">{run.backend === 'local_hybrid' ? 'Qwen' : 'ChatGPT'} findings (validated against supplied message IDs)</div>
+            <div className="mdl-k">{contextualLabel(run)} findings (validated against supplied message IDs)</div>
             {run.findings.length === 0 && <div className="mdl-line">none</div>}
             {run.findings.map((f, i) => (
               <div key={i} className="mdl-line">

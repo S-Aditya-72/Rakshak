@@ -25,7 +25,7 @@ export const EvidenceEventSchema = z.object({
   modifier: z.enum(MODIFIERS),
   status: evStatus,
   agreement,
-  sources: z.array(z.enum(['roberta', 'qwen', 'chatgpt'])),
+  sources: z.array(z.enum(['roberta', 'qwen', 'chatgpt', 'rules'])),
   rationale: z.string(),
   runId: z.string(),
 });

@@ -36,3 +36,17 @@ export function usePhoneScale(phones: number, reserved: number, chrome = 150) {
     return () => window.removeEventListener('resize', update);
   }, [phones, reserved, chrome]);
 }
+
+/** The real time, refreshed every few seconds: phones show the device's clock, not a fixed 9:41. */
+export function useClock() {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const t = setInterval(() => setNow(new Date()), 5000);
+    return () => clearInterval(t);
+  }, []);
+  return {
+    now,
+    time: now.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }).replace(/\s?[AP]M$/i, ''),
+    date: now.toLocaleDateString([], { weekday: 'long', day: 'numeric', month: 'long' }),
+  };
+}

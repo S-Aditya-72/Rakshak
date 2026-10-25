@@ -37,6 +37,8 @@ class Settings:
     qwen_seed: int = field(default_factory=lambda: int(_env("QWEN_SEED", "7")))
     # Second, narrow Qwen pass that re-checks new uncorroborated findings before they become evidence.
     verify_findings: bool = field(default_factory=lambda: _env("VERIFY", "1") == "1")
+    # With Ollama unreachable, analyse live chat with keyword rules instead of failing (labelled "rules fallback").
+    rules_fallback: bool = field(default_factory=lambda: _env("RULES_FALLBACK", "1") == "1")
     warmup: bool = field(default_factory=lambda: _env("WARMUP", "1") == "1")
 
     # Sign in with ChatGPT companion (Node, holds the OAuth tokens)
@@ -51,6 +53,14 @@ class Settings:
 
     # Logging raw conversation text is off by default.
     log_text: bool = field(default_factory=lambda: _env("LOG_TEXT", "0") == "1")
+
+    # Remote clients (phones on the LAN or through a tunnel). Requests that do not come straight from this machine
+    # must send this token in X-Rakshak-Token; with no token set they are refused. `npm run server:lan` sets one.
+    access_token: str = field(default_factory=lambda: _env("ACCESS_TOKEN", ""))
+    # Origins allowed by CORS: the Android app (Capacitor) serves the UI from localhost.
+    cors_origins: tuple[str, ...] = field(
+        default_factory=lambda: tuple(o.strip() for o in _env("CORS_ORIGINS", "http://localhost,https://localhost,capacitor://localhost").split(",") if o.strip())
+    )
 
     @property
     def db_path(self) -> Path:

@@ -412,7 +412,7 @@ export function guardianSummary(t: TrackState, childName: string, contactLabel: 
   if (t.level === 3)
     return {
       title: t.stage === 'coercion' ? 'Threat / coercion detected' : 'Critical safeguarding concern',
-      body: `Potential grooming pattern from ${who}: ${n} cues over ${days} (${kinds}). Model-detected, needs your review. A guided report is ready.`,
+      body: `Potential grooming pattern from ${who}: ${n} cues over ${days} (${kinds}). Model-detected, needs your review. Get help walks you through the next steps.`,
     };
   return {
     title: 'Potential grooming pattern',

@@ -29,6 +29,7 @@ from .prompting import CUE_DEFINITIONS
 from .db import Store
 from .fusion import fuse
 from .roberta import RobertaClassifier
+from .rules import RulesAnalyzer
 from .validation import InvalidModelOutput, Validated, validate
 
 log = logging.getLogger("rakshak.pipeline")
@@ -46,6 +47,7 @@ class Pipeline:
         self.store = store
         self.roberta = roberta
         self.qwen = qwen
+        self.rules = RulesAnalyzer()
         self.chatgpt = chatgpt
         self.locks = {"local_hybrid": asyncio.Lock(), "chatgpt_cloud": asyncio.Lock()}
         self.latest_requested: dict[tuple[str, str], int] = {}
@@ -134,11 +136,21 @@ class Pipeline:
             roberta_ms = round((time.perf_counter() - r0) * 1000, 1)
             roberta_scores.update({s.message_id: s for s in scores})
 
+        source = self.qwen.source if backend == "local_hybrid" else self.chatgpt.source
+
         async def run_contextual():
-            nonlocal validated, contextual_ms, contextual_model, error, meta
+            nonlocal validated, contextual_ms, contextual_model, error, meta, source
             analyzer = self.qwen if backend == "local_hybrid" else self.chatgpt
             try:
-                raw = await analyzer.analyze(ctx, req.model)
+                try:
+                    raw = await analyzer.analyze(ctx, req.model)
+                except AnalyzerError as e:
+                    # No Qwen on this machine (no GPU laptop, Ollama stopped): keep live chat working with the labelled
+                    # rules fallback. Never for ChatGPT: a cloud result is never stood in for.
+                    if backend != "local_hybrid" or not self.s.rules_fallback or e.code not in ("ollama_unavailable", "model_missing"):
+                        raise
+                    warnings.append(f"{e.message}; used the rules fallback (keyword rules, not an AI model)")
+                    raw, source = await self.rules.analyze(ctx), self.rules.source
                 contextual_ms, contextual_model, meta = round(raw.latency_ms, 1), raw.model_id, raw.meta
                 validated = validate(raw.data, ctx)
                 warnings.extend(validated.warnings)
@@ -150,7 +162,7 @@ class Pipeline:
         await asyncio.gather(run_roberta(), run_contextual())
 
         verify_ms: Optional[float] = None
-        if backend == "local_hybrid" and validated is not None and self.s.verify_findings:
+        if backend == "local_hybrid" and validated is not None and self.s.verify_findings and source == self.qwen.source:
             verify_ms = await self._verify(validated, ctx, conv_ev, roberta_scores, participants, warnings)
 
         if backend == "chatgpt_cloud" and validated is None:
@@ -162,7 +174,7 @@ class Pipeline:
         prior_flagged = frozenset((e.message_id, e.cue) for e in conv_ev if e.status in ("active", "needs_review") and e.modifier == "none")
         events, decisions = fuse(
             backend=backend, child_id=child_id, conv=conv, messages=by_id, focus_ids=focus_ids, roberta=roberta_scores,
-            validated=validated, contextual_source=self.qwen.source if backend == "local_hybrid" else self.chatgpt.source,
+            validated=validated, contextual_source=source,
             roberta_threshold=self.s.roberta_threshold, run_id=run_id, prior_objectors=prior_objectors, prior_flagged=prior_flagged,
         )
 

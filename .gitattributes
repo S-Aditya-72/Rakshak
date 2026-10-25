@@ -1,0 +1,3 @@
+# Unix shell scripts must keep LF line endings, even when checked out on Windows.
+*.sh text eol=lf
+rakshak/apps/web/android/gradlew text eol=lf

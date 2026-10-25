@@ -1,8 +1,57 @@
-// Client for the local RAKSHAK inference service (apps/server). Vite proxies /api to 127.0.0.1:8787.
+// Client for the RAKSHAK inference service (apps/server). By default it calls /api on the same origin, which Vite
+// proxies to 127.0.0.1:8787. Phones point it at the server laptop instead (getServer / setServer).
 // Every analysis response is validated against the shared zod contract before the UI uses it.
 
 import type { BackendId, Conversation, EvidenceEvent, Message, Participant } from '@rakshak/shared';
 import { AnalyzeResponseSchema, type AnalyzeResponse } from '@rakshak/shared/schema';
+
+export interface ServerConfig {
+  /** e.g. http://192.168.1.20:8787, or a tunnel URL. Empty = this laptop through the dev server. */
+  url: string;
+  /** Access code printed by `npm run server:lan`. */
+  token: string;
+}
+
+const SERVER_KEY = 'rakshak.server';
+let server: ServerConfig = loadServer();
+const serverListeners = new Set<(c: ServerConfig) => void>();
+
+/** Called after setServer, e.g. so the device-sync socket reconnects to the new address. */
+export function onServerChange(fn: (c: ServerConfig) => void): () => void {
+  serverListeners.add(fn);
+  return () => serverListeners.delete(fn);
+}
+
+function loadServer(): ServerConfig {
+  try {
+    const v = JSON.parse(localStorage.getItem(SERVER_KEY) ?? 'null');
+    if (v && typeof v.url === 'string') return { url: v.url, token: typeof v.token === 'string' ? v.token : '' };
+  } catch {
+    /* storage unavailable */
+  }
+  return { url: '', token: '' };
+}
+
+export function getServer(): ServerConfig {
+  return server;
+}
+
+/** "192.168.1.20" → http://192.168.1.20:8787, "abc.trycloudflare.com" → https://…, trailing "/api/" dropped. */
+export function setServer(next: ServerConfig): ServerConfig {
+  let url = next.url.trim().replace(/\/+$/, '').replace(/\/api$/, '');
+  if (url && !/^https?:\/\//i.test(url)) {
+    const ip = url.match(/^(\d{1,3}(?:\.\d{1,3}){3})(:\d+)?$/);
+    url = ip ? `http://${ip[1]}${ip[2] ?? ':8787'}` : `https://${url}`;
+  }
+  server = { url, token: next.token.trim() };
+  try {
+    localStorage.setItem(SERVER_KEY, JSON.stringify(server));
+  } catch {
+    /* kept for this session only */
+  }
+  serverListeners.forEach((fn) => fn(server));
+  return server;
+}
 
 export class ApiError extends Error {
   constructor(
@@ -20,9 +69,12 @@ async function call<T>(method: string, path: string, body?: unknown, timeoutMs =
   const onAbort = () => ctrl.abort(signal?.reason);
   signal?.addEventListener('abort', onAbort);
   try {
-    const res = await fetch(`/api${path}`, {
+    const headers: Record<string, string> = {};
+    if (body !== undefined) headers['content-type'] = 'application/json';
+    if (server.token) headers['x-rakshak-token'] = server.token;
+    const res = await fetch(`${server.url}/api${path}`, {
       method,
-      headers: body === undefined ? undefined : { 'content-type': 'application/json' },
+      headers,
       body: body === undefined ? undefined : JSON.stringify(body),
       signal: ctrl.signal,
     });
@@ -158,6 +210,13 @@ export const api = {
     call<{ withdrawn: boolean }>('POST', `/cases/${childId}/alerts/${encodeURIComponent(alertId)}/withdraw`, b),
   dismissal: (childId: string, d: { day: number; trackKey: string | null }) => call('POST', `/cases/${childId}/dismissals`, d),
   block: (childId: string, b: { contactId: string; day: number }) => call('POST', `/cases/${childId}/blocks`, b),
+  guardians: {
+    invite: (b: { minutes: number; scope: 'all' | 'critical'; label?: string }) => call<{ id: string; code: string; scope: 'all' | 'critical'; expiresAt: number }>('POST', '/guardians/invites', b),
+    list: () => call<{ guardians: import('./sync').GuardianView[] }>('GET', '/guardians'),
+    revoke: (id: string) => call<{ ok: boolean }>('POST', `/guardians/${encodeURIComponent(id)}/revoke`, {}),
+  },
+  connectInfo: () => call<{ addresses: string[]; port: number; token: string; lan: boolean }>('GET', '/connect-info'),
+  syncPeers: () => call<{ peers: { id: string; role: 'chat' | 'guardian' | 'temp'; name: string; addr: string; scope: string; audience: string; connectedAt: number; frames: number; bytes: number; recent: string[] }[]; blockedFrames: number }>('GET', '/sync/peers', undefined, 4000),
   chatgpt: {
     status: () => call<ChatGPTStatus>('GET', '/chatgpt/status', undefined, 6000),
     signIn: () => call<{ started: boolean }>('POST', '/chatgpt/signin', {}, 15000),

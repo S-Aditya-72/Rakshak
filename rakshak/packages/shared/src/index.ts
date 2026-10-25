@@ -83,7 +83,7 @@ export type Agreement = 'agree' | 'contextual_only' | 'context_override' | 'need
 
 export type EvidenceStatus = 'active' | 'needs_review' | 'superseded' | 'suppressed';
 
-export type ModelSource = 'roberta' | 'qwen' | 'chatgpt';
+export type ModelSource = 'roberta' | 'qwen' | 'chatgpt' | 'rules';
 
 // ---------- entities ----------
 

@@ -76,7 +76,7 @@ const A4: Analysis = {
   latency: { gpt: 401, inhouse: 30 },
   alert: {
     guardianTitle: 'Threat & payment demand',
-    guardianBody: 'Sextortion pattern: money demanded with a threat to share. A guided report is ready.',
+    guardianBody: 'Sextortion pattern: money demanded with a threat to share. Get help walks you through the next steps.',
   },
 };
 

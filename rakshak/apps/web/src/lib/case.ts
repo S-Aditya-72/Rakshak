@@ -37,6 +37,12 @@ export function riskOf(c: CaseInputs): RiskState {
 }
 
 /** Per-message view of one run: the evidence attached to that message plus the case state after the run. */
+/** Who read the whole conversation in this run. The rules fallback stands in for Qwen when Ollama is not running. */
+export function contextualLabel(run: AnalysisResult): string {
+  if (run.models.contextual === 'rules-fallback') return 'Rules fallback';
+  return run.backend === 'local_hybrid' ? 'Qwen' : 'ChatGPT';
+}
+
 export function analysisFor(messageId: string, run: AnalysisResult, evidence: EvidenceEvent[], risk: RiskState, backend: Backend): Analysis {
   const own = evidence.filter((e) => e.messageId === messageId && e.status !== 'superseded');
   const cues: CueHit[] = own.map((e) => ({ cue: e.cue, p: e.p, status: e.status, agreement: e.agreement, modifier: e.modifier, targetId: e.targetId }));
@@ -51,7 +57,7 @@ export function analysisFor(messageId: string, run: AnalysisResult, evidence: Ev
     // What the contextual model was actually given (reported by the server). Inclusion does not prove the model relied on every message.
     `context  ${cs.messages} message${cs.messages === 1 ? '' : 's'} from this chat (~${cs.approxTokens} tokens)${cs.truncated ? ', older plain messages omitted to fit the budget' : ''}${cs.relatedEvidence ? ` + ${cs.relatedEvidence} finding${cs.relatedEvidence === 1 ? '' : 's'} from other chats` : ''} · ${run.focusMessageIds.length} new message${run.focusMessageIds.length === 1 ? '' : 's'} assessed`,
     ...(rob ? [`RoBERTa  bullying=${rob.bullying.toFixed(2)}  (${rob.predicted.replace('_', '-')}, ${rob.latencyMs} ms)`] : []),
-    ...(run.models.contextual ? [`${run.backend === 'local_hybrid' ? 'Qwen' : 'ChatGPT'}  ${run.assessment}${run.latency.contextualMs ? ` (${Math.round(run.latency.contextualMs)} ms)` : ''}`] : []),
+    ...(run.models.contextual ? [`${contextualLabel(run)}  ${run.assessment}${run.latency.contextualMs ? ` (${Math.round(run.latency.contextualMs)} ms)` : ''}`] : []),
     ...notes,
     ...(run.error ? [`error · ${run.error.code}: ${run.error.message}`] : []),
     ...risk.trace.slice(-6),
@@ -91,6 +97,7 @@ export function alertsToFire(risk: RiskState, alerted: Record<string, number>, c
       cues: t.cues.map((c) => ({ cue: c.cue, day: c.day })),
       category: t.kind,
       trackKey: t.key,
+      contactId: t.contactId ?? undefined,
     };
   });
   // Route the most severe last so it is the one left on screen.

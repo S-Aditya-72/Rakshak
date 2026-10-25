@@ -16,7 +16,12 @@
     "eval": "vite-node scripts/eval.ts",
     "companion": "npm --prefix apps/siwc-companion start",
     "server": "node scripts/start-server.mjs",
+    "server:lan": "node scripts/start-server.mjs --lan",
+    "apk": "node scripts/build-apk.mjs",
     "e2e": "node scripts/e2e-browser.mjs",
     "setup:siwc": "node scripts/setup-siwc.mjs"
+  },
+  "dependencies": {
+    "qrcode": "^1.5.4"
   }
 }

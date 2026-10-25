@@ -3,15 +3,20 @@
 //
 // It always works on the selected alert's own case (caseKey). If that case is no longer loaded it says so and
 // shows nothing from any other case. Nothing here contacts anyone, blocks a real account or submits a complaint.
+//
+// On a guardian's phone (Android app) the panel works from the alert summary only: that phone never receives the
+// child's messages or the model's output, so evidence review stays on the child's phone and the laptop.
 
 import { AnimatePresence, motion } from 'framer-motion';
-import { Ban, CircleAlert, Download, ExternalLink, FileText, HeartHandshake, Info, Lock, MessageCircleHeart, Phone, Scale, ShieldCheck, X } from 'lucide-react';
+import { Ban, Check, CircleAlert, Download, ExternalLink, FileText, HeartHandshake, Info, Lock, MessageCircleHeart, Phone, Scale, ShieldCheck, X } from 'lucide-react';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { BACKEND_META, CUE_META, LEVEL_META, WEEKDAYS } from '../data/meta';
 import { REPORTING, SUPPORT, type Resource } from '../data/resources';
 import { buildExport, defaultRules, download, newReportId, reportItems, toHtml, toJson, type ReportItem } from '../lib/report';
-import { caseKeyFor, childNameOf, recordBlock, useDemo, type HelpTab } from '../store';
-import type { AlertItem } from '../types';
+import { isGuardianDevice, useDevice } from '../lib/device';
+import { openExternal } from '../lib/native';
+import { caseKeyFor, childNameOf, recordBlock, respond, useDemo, type HelpTab } from '../store';
+import type { AlertItem, ResponseKind } from '../types';
 import { NeonBadge } from './primitives';
 
 const TABS: { id: HelpTab; label: string; icon: typeof Info }[] = [
@@ -33,6 +38,7 @@ function HelpPanel({ alert }: { alert: AlertItem }) {
   const setTab = (t: HelpTab) => dispatch({ type: 'openHelp', alert, tab: t });
   const sameCase = !alert.preview && alert.caseKey === caseKeyFor(d);
   const child = alert.childName ?? childNameOf(d);
+  const summaryOnly = isGuardianDevice();
 
   return (
     <motion.div className="help-scrim" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => dispatch({ type: 'closeHelp' })}>
@@ -81,10 +87,17 @@ function HelpPanel({ alert }: { alert: AlertItem }) {
                 : 'This alert belongs to an earlier case that is no longer loaded (the case was reset or replaced). Its evidence is not shown, and nothing from the current case is substituted.'}
             </div>
           )}
-          {tab === 'understand' && <Understand alert={alert} sameCase={sameCase} child={child} />}
+          {tab === 'understand' && <Understand alert={alert} sameCase={sameCase} child={child} summaryOnly={summaryOnly} />}
           {tab === 'support' && <Support alert={alert} sameCase={sameCase} child={child} />}
-          {tab === 'evidence' && (sameCase ? <Evidence alert={alert} child={child} /> : <p className="help-p">Evidence review needs the alert's own case to be loaded.</p>)}
-          {tab === 'complaint' && <Complaint alert={alert} onReport={() => setTab('evidence')} />}
+          {tab === 'evidence' &&
+            (summaryOnly ? (
+              <SummaryOnly child={child} />
+            ) : sameCase ? (
+              <Evidence alert={alert} child={child} />
+            ) : (
+              <p className="help-p">Evidence review needs the alert's own case to be loaded.</p>
+            ))}
+          {tab === 'complaint' && <Complaint alert={alert} onReport={() => setTab('evidence')} onDone={() => dispatch({ type: 'closeHelp' })} />}
         </div>
         <div className="help-foot">
           <Lock size={12} /> Status: <b>Not submitted</b>. RAKSHAK does not contact anyone, block real accounts or submit complaints. AI findings are not a legal determination.
@@ -110,7 +123,24 @@ function useAlertEvidence(alert: AlertItem, sameCase: boolean, includeLater = fa
   }, [alert, sameCase, includeLater, d.evidence, d.messages, d.participants, d.conversations, d.childId, d.risk]);
 }
 
-function Understand({ alert, sameCase, child }: { alert: AlertItem; sameCase: boolean; child: string }) {
+/** A guardian's phone holds the alert summary only: what was detected and when, never the messages. */
+function SummaryOnly({ child }: { child: string }) {
+  return (
+    <section className="help-card wide">
+      <h3>
+        <Lock size={15} /> Evidence stays on {child}'s phone
+      </h3>
+      <p className="help-p">
+        This phone receives alert summaries only: cue types, days and the risk level. {child}'s messages and the AI's reading of them are never sent here.
+      </p>
+      <p className="help-p muted">
+        To review excerpts and make a redacted report, open Get help for this alert on the RAKSHAK laptop, or go through {child}'s phone together with {child}.
+      </p>
+    </section>
+  );
+}
+
+function Understand({ alert, sameCase, child, summaryOnly }: { alert: AlertItem; sameCase: boolean; child: string; summaryOnly: boolean }) {
   const { items, track } = useAlertEvidence(alert, sameCase);
   const backend = useDemo((s) => s.data.backend);
   const findings = items.flatMap((i) => i.findings.map((f) => ({ ...f, ref: i.messageId, fromChild: i.fromChild })));
@@ -134,6 +164,22 @@ function Understand({ alert, sameCase, child }: { alert: AlertItem; sameCase: bo
         )}
       </section>
 
+      {summaryOnly ? (
+        <section className="help-card">
+          <h3>
+            <span className="help-tag tag-rec">What was detected</span>
+          </h3>
+          <ul className="help-list">
+            {alert.cues.map((c, n) => (
+              <li key={n}>
+                {CUE_META[c.cue]?.label ?? c.cue} · Day {c.day} {WEEKDAYS[c.day] ?? ''}
+              </li>
+            ))}
+          </ul>
+          <p className="help-note">Message text and the AI's interpretations stay on {child}'s phone.</p>
+        </section>
+      ) : (
+        <>
       <section className="help-card">
         <h3>
           <span className="help-tag tag-rec">Recorded messages</span>
@@ -174,6 +220,8 @@ function Understand({ alert, sameCase, child }: { alert: AlertItem; sameCase: bo
           {review || disagree || override ? ` Uncertainty: ${review} finding${review === 1 ? '' : 's'} need review, ${disagree} where the two models disagreed, ${override} overridden by context.` : ''}
         </p>
       </section>
+        </>
+      )}
 
       <section className="help-card">
         <h3>
@@ -207,7 +255,13 @@ function Support({ alert, sameCase, child }: { alert: AlertItem; sameCase: boole
   const [blocked, setBlocked] = useState<string[]>([]);
   const bullying = alert.category === 'bullying';
   const payment = alert.cues.some((c) => c.cue === 'threat_payment');
-  const accounts = [...new Map(items.filter((i) => !i.fromChild).map((i) => [i.senderId, i.senderName])).entries()];
+  // From the evidence; on a guardian's phone (no evidence there) the contact named in the alert itself.
+  const fromEvidence = [...new Map(items.filter((i) => !i.fromChild).map((i) => [i.senderId, i.senderName])).entries()];
+  const contact = alert.contactId ? d.participants.find((p) => p.id === alert.contactId) : undefined;
+  const accounts = fromEvidence.length ? fromEvidence : contact ? [[contact.id, contact.displayName] as [string, string]] : [];
+  const temporary = useDevice((s) => s.role === 'temp') && isGuardianDevice();
+  const caseHere = sameCase || isGuardianDevice();
+  const onPhone = isGuardianDevice();
 
   return (
     <div className="help-grid">
@@ -227,6 +281,8 @@ function Support({ alert, sameCase, child }: { alert: AlertItem; sameCase: boole
             <li>Agree next steps together, and check in again tomorrow.</li>
           </ul>
         )}
+        <LogButton kind="guardian_talk" alert={alert} label={`Send ${child} a check-in`} doneLabel={`Check-in sent to ${child}`} disabled={!caseHere} />
+        <p className="help-note">The check-in appears on {child}'s phone as a note from you; {child} can answer with one tap.</p>
       </section>
 
       <section className="help-card">
@@ -252,6 +308,7 @@ function Support({ alert, sameCase, child }: { alert: AlertItem; sameCase: boole
         </ul>
       </section>
 
+      {!temporary && (
       <section className="help-card">
         <h3>
           <Ban size={15} /> Block contact
@@ -264,18 +321,23 @@ function Support({ alert, sameCase, child }: { alert: AlertItem; sameCase: boole
             <button
               key={id}
               className="chip-btn"
-              disabled={done || !sameCase}
+              disabled={done || !caseHere}
               onClick={() => {
-                recordBlock(id);
+                recordBlock(id, alert.id);
                 setBlocked((v) => [...v, id]);
               }}
             >
-              <Ban size={12} /> {done ? `Recorded: ${name} blocked in the simulator` : `Block ${name} (simulator only)`}
+              <Ban size={12} /> {done ? (onPhone ? `${name} blocked` : `Recorded: ${name} blocked in the simulator`) : onPhone ? `Block ${name}` : `Block ${name} (simulator only)`}
             </button>
           );
         })}
-        <p className="help-note">A simulator block only changes this demo case (a new account after a block is flagged for review). No real account is blocked.</p>
+        <p className="help-note">
+          {onPhone
+            ? `Blocks ${accounts[0]?.[1] ?? 'the contact'} in the RAKSHAK demo messenger on every phone: their messages stop reaching ${child}. No account on any other app is affected.`
+            : 'A simulator block only changes this demo case (a new account after a block is flagged for review). No real account is blocked.'}
+        </p>
       </section>
+      )}
 
       <section className="help-card wide">
         <h3>
@@ -283,8 +345,20 @@ function Support({ alert, sameCase, child }: { alert: AlertItem; sameCase: boole
         </h3>
         <p className="help-p muted">No counsellor service is connected to this prototype, and nobody has been contacted. Contact the school counsellor directly, or:</p>
         <ResourceList items={SUPPORT} />
+        <LogButton kind="guardian_counsellor" alert={alert} label="Note: counsellor looped in" doneLabel="Noted in the case" disabled={!caseHere} />
       </section>
     </div>
+  );
+}
+
+/** A helpline number: on a phone, tapping it opens the dialer with the number filled in. */
+function HelpNumber({ value }: { value: string }) {
+  const digits = value.replace(/[\s-]/g, '');
+  if (!/^\d{3,}$/.test(digits)) return <span className="help-num">{value}</span>;
+  return (
+    <a className="help-num" href={`tel:${digits}`} onClick={(e) => (e.preventDefault(), openExternal(`tel:${digits}`))}>
+      {value}
+    </a>
   );
 }
 
@@ -294,7 +368,7 @@ function ResourceList({ items }: { items: Resource[] }) {
       {items.map((r) => (
         <li key={r.name}>
           <b>{r.name}</b>
-          {r.contact ? <span className="help-num">{r.contact}</span> : null} · {r.what}{' '}
+          {r.contact ? <HelpNumber value={r.contact} /> : null} · {r.what}{' '}
           <a href={r.source.url} target="_blank" rel="noopener noreferrer">
             source <ExternalLink size={10} />
           </a>
@@ -479,7 +553,17 @@ function Evidence({ alert, child }: { alert: AlertItem; child: string }) {
 
 // ---------- 4. Complaint options ----------
 
-function Complaint({ alert, onReport }: { alert: AlertItem; onReport: () => void }) {
+/** A response recorded in the case and shown on every phone (the same as the alert's own buttons). */
+function LogButton({ kind, alert, label, doneLabel, disabled }: { kind: ResponseKind; alert: AlertItem; label: string; doneLabel: string; disabled?: boolean }) {
+  const done = useDemo((s) => s.data.responses.some((r) => r.kind === kind && r.alertId === alert.id));
+  return (
+    <button className="chip-btn" disabled={done || disabled} onClick={() => respond(kind, alert.id)}>
+      {done && <Check size={12} />} {done ? doneLabel : label}
+    </button>
+  );
+}
+
+function Complaint({ alert, onReport, onDone }: { alert: AlertItem; onReport: () => void; onDone: () => void }) {
   const [which, setWhich] = useState<'standard' | 'anonymous' | 'portal'>('standard');
   const [answer, setAnswer] = useState<'yes' | 'no' | 'unsure' | null>(null);
   const payment = alert.cues.some((c) => c.cue === 'threat_payment');
@@ -564,6 +648,9 @@ function Complaint({ alert, onReport }: { alert: AlertItem; onReport: () => void
             <b>{REPORTING.takeItDown.name}:</b> {REPORTING.takeItDown.what}
           </p>
           <div className="pop-inline">
+            <button className="chip-btn" onClick={() => openExternal('tel:1930') && respond('guardian_call', alert.id)}>
+              <Phone size={12} /> Call 1930
+            </button>
             <a className="btn-amber link-btn" href={REPORTING.portal.url} target="_blank" rel="noopener noreferrer">
               <ExternalLink size={14} /> Open cybercrime.gov.in
             </a>
@@ -573,6 +660,22 @@ function Complaint({ alert, onReport }: { alert: AlertItem; onReport: () => void
           </div>
           <p className="help-note">The link opens the official site in a new tab. No case data is attached or sent; you fill in the complaint yourself. RAKSHAK records the report as “Not submitted”.</p>
           <Sources list={[...REPORTING.portal.sources, ...REPORTING.helpline1930.sources, REPORTING.takeItDown.source]} />
+        </section>
+      )}
+
+      {alert.level === 3 && (
+        <section className="help-card wide">
+          <h3>When you have done what you need to</h3>
+          <p className="help-p muted">Closes the critical alert on every phone. The alert stays in the guardian's history and report.</p>
+          <button
+            className="chip-btn"
+            onClick={() => {
+              respond('report_done', alert.id);
+              onDone();
+            }}
+          >
+            <Check size={12} /> Mark as handled
+          </button>
         </section>
       )}
     </div>
