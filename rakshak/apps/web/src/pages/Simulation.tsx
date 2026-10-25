@@ -32,8 +32,10 @@ import { CaseCard, DebugFeed, EVIDENCE_EVENT, EvidencePanel, ModelsPanel, ScoreC
 import { CaseStudyView } from '../console/CaseStudyView';
 import { ChatGPTPanel } from '../console/ChatGPTPanel';
 import { Segmented } from '../console/Segmented';
+import { ServerSettings } from '../console/ServerSettings';
 import { Studio } from '../console/Studio';
 import { BACKEND_META, CUE_ACTIVE_P, CUE_META, GUARDIAN, LEVEL_META, WEEKDAYS } from '../data/meta';
+import { ConnectButton, DevicesPanel } from './Engine';
 import { SCENARIO as PREVIEW_SCRIPT } from '../data/scenario';
 import { canCompose, MODE_META, ORIGIN_META } from '../lib/flow';
 import { usePhoneScale } from '../lib/hooks';
@@ -144,14 +146,22 @@ function Caption() {
     const a = last.analysis;
     level = a.level;
     key = `a-${last.id}-${a.level}`;
-    const cues = a.cues.filter((c) => c.p >= CUE_ACTIVE_P && (c.status === undefined || c.status === 'active' || c.status === 'needs_review')).map((c) => CUE_META[c.cue].label);
+    // Only confirmed cues are reported as detected; pending ones are shown as waiting, never as harm.
+    const cues = a.cues.filter((c) => c.p >= CUE_ACTIVE_P && (c.status === undefined || c.status === 'active')).map((c) => CUE_META[c.cue].label);
+    const waiting = a.cues.filter((c) => c.p >= CUE_ACTIVE_P && c.status === 'needs_review').map((c) => CUE_META[c.cue].label);
     content = (
       <>
         <b>
           Day {last.day} · {WEEKDAYS[last.day]}
         </b>
         <span className="cap-sep">·</span>
-        {cues.length ? `${[...new Set(cues)].join(' + ')} detected` : a.run?.assessment === 'uncertain' ? 'model uncertain' : 'no harmful cues on this message'}
+        {cues.length
+          ? `${[...new Set(cues)].join(' + ')} detected`
+          : waiting.length
+            ? `possible ${[...new Set(waiting)].join(' + ')} · waiting for confirmation`
+            : a.run?.assessment === 'uncertain'
+              ? 'model uncertain · waiting for more context'
+              : 'no harmful cues on this message'}
         <span className="cap-arrow">→</span>
         <span style={{ color: LEVEL_META[a.level].color }}>{outcome(a.level, childNameOf(d))}</span>
         {a.preview && <span className="cap-sep">· preview, not live AI</span>}
@@ -247,7 +257,8 @@ function SettingsPopover({ onClose }: { onClose: () => void }) {
       className="popover popover-wide"
       initial={{ opacity: 0, y: 12, scale: 0.97 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
-      exit={{ opacity: 0, y: 8, scale: 0.98, transition: { duration: 0.15 } }}
+      // Clicks stop the moment it starts closing: a stalled exit (hidden tab) must not leave an invisible layer over the phones.
+      exit={{ opacity: 0, y: 8, scale: 0.98, pointerEvents: 'none', transition: { duration: 0.15 } }}
       transition={{ type: 'spring', stiffness: 420, damping: 32 }}
     >
       <div className="pop-row">
@@ -268,6 +279,12 @@ function SettingsPopover({ onClose }: { onClose: () => void }) {
           : 'Your connected ChatGPT account analyses the conversation in the cloud. Runs only when you press “Analyze with ChatGPT”.'}
       </div>
       {d.backend === 'gpt' && <ChatGPTPanel />}
+      <div className="pop-k">Server</div>
+      <ServerSettings />
+      <div className="pop-row">
+        <span className="pop-k">Phones</span>
+        <ConnectButton />
+      </div>
 
       {d.mode === 'A' && (
         <>
@@ -451,7 +468,7 @@ function EngineDrawer({ onClose }: { onClose: () => void }) {
       className="drawer"
       initial={{ opacity: 0, x: 60 }}
       animate={{ opacity: 1, x: 0 }}
-      exit={{ opacity: 0, x: 60, transition: { duration: 0.2 } }}
+      exit={{ opacity: 0, x: 60, pointerEvents: 'none', transition: { duration: 0.2 } }}
       transition={{ type: 'spring', stiffness: 260, damping: 30 }}
     >
       <div className="drawer-head">
@@ -525,7 +542,7 @@ function StatusPill() {
   } else if (health) {
     if (backend === 'inhouse') {
       const ok = health.roberta.ready && health.qwen.reachable && health.qwen.modelPresent;
-      text = ok ? `Local AI ready · RoBERTa (${health.roberta.device}) + ${health.qwen.model}` : !health.qwen.reachable ? 'Ollama not running · RoBERTa-only fallback' : !health.qwen.modelPresent ? `${health.qwen.model} not pulled` : 'RoBERTa loading…';
+      text = ok ? `Local AI ready · RoBERTa (${health.roberta.device}) + ${health.qwen.model}` : !health.qwen.reachable ? 'Ollama not running · rules fallback (not AI)' : !health.qwen.modelPresent ? `${health.qwen.model} not pulled` : 'RoBERTa loading…';
       tone = ok ? 'ok' : 'warn';
     } else {
       const c = health.chatgpt;
@@ -566,7 +583,9 @@ function ModeSwitch() {
   );
 }
 
-export function SimulationPage() {
+export function SimulationPage({ initialView = 'phones' }: { initialView?: 'phones' | 'engine' }) {
+  // phones: the three drawn phones (no real phones needed) · engine: the projector view while real phones carry the story
+  const [view, setView] = useState(initialView);
   const [params] = useSearchParams();
   const childName = useDemo((s) => childNameOf(s.data));
   const [engineOpen, setEngineOpen] = useState(false);
@@ -575,6 +594,7 @@ export function SimulationPage() {
   const spot = useSpotlight();
 
   usePhoneScale(3, (engineOpen ? 470 : 0) + (studioOpen ? 380 : 0), 240);
+  useEffect(() => setView(initialView), [initialView]);
 
   useEffect(() => {
     const m = params.get('mode');
@@ -604,6 +624,7 @@ export function SimulationPage() {
       else if (e.key.toLowerCase() === 'e') setEngineOpen((v) => !v);
       else if (e.key.toLowerCase() === 's') setStudioOpen((v) => !v);
       else if (e.key.toLowerCase() === 'r') void resetDemo();
+      else if (e.key.toLowerCase() === 'v') setView((v) => (v === 'phones' ? 'engine' : 'phones'));
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -624,7 +645,18 @@ export function SimulationPage() {
           RAKSHAK
         </Link>
         <ModeSwitch />
-        <StatusPill />
+        <div className="sim-top-right">
+          <div className="view-toggle" role="tablist" aria-label="View">
+            <button className={view === 'phones' ? 'on' : ''} onClick={() => setView('phones')}>
+              Drawn phones
+            </button>
+            <button className={view === 'engine' ? 'on' : ''} onClick={() => setView('engine')}>
+              Real phones · engine
+            </button>
+          </div>
+          <ConnectButton />
+          <StatusPill />
+        </div>
       </header>
 
       <Caption />
@@ -636,6 +668,22 @@ export function SimulationPage() {
             <PanelLeftOpen size={15} /> Studio
           </button>
         )}
+        {view === 'engine' ? (
+          <div className="engine-grid">
+            <div className="engine-col">
+              <CaseCard />
+              <DevicesPanel />
+            </div>
+            <div className="engine-col">
+              <ScoreChart />
+              <DebugFeed />
+            </div>
+            <div className="engine-col">
+              <EvidencePanel />
+              <ModelsPanel />
+            </div>
+          </div>
+        ) : (
         <motion.div layout className="sim-stage" transition={{ type: 'spring', stiffness: 220, damping: 30 }}>
           <div className={`sim-phone ${cls('predator')}`}>
             <PhoneFrame theme="dark">
@@ -660,8 +708,9 @@ export function SimulationPage() {
             </div>
           </div>
         </motion.div>
+        )}
 
-        <AnimatePresence>{engineOpen && <EngineDrawer onClose={() => setEngineOpen(false)} />}</AnimatePresence>
+        <AnimatePresence>{view === 'phones' && engineOpen && <EngineDrawer onClose={() => setEngineOpen(false)} />}</AnimatePresence>
       </main>
 
       <Dock engineOpen={engineOpen} onToggleEngine={() => setEngineOpen((v) => !v)} onOpenStudio={() => setStudioOpen(true)} />

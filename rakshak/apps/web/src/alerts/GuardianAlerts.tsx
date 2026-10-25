@@ -1,9 +1,10 @@
 import { motion } from 'framer-motion';
-import { Ban, HeartHandshake, LifeBuoy, Lock, MessageCircleHeart, Phone, ShieldCheck, Users, X } from 'lucide-react';
-import { useEffect } from 'react';
+import { Ban, Check, HeartHandshake, LifeBuoy, Lock, MessageCircleHeart, Phone, ShieldCheck, Siren, Users, X } from 'lucide-react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { CUE_META, LEVEL_META, WEEKDAYS } from '../data/meta';
-import { childNameOf, useDemo, type HelpTab } from '../store';
-import type { AlertItem } from '../types';
+import { buzz, openExternal } from '../lib/native';
+import { blockContact, childNameOf, isBlocked, respond, useDemo, type HelpTab } from '../store';
+import type { AlertItem, Notice, ResponseKind } from '../types';
 import { Icon3DWarning } from './Icon3DWarning';
 import { HazardStripe, NeonBadge, ScoreRing, StageStepper } from './primitives';
 
@@ -36,7 +37,7 @@ export function GuardianBanner({ alert }: { alert: AlertItem }) {
       className="g-banner"
       initial={{ y: -140, opacity: 0, scale: 0.92 }}
       animate={{ y: 0, opacity: 1, scale: 1 }}
-      exit={{ y: -140, opacity: 0, transition: { duration: 0.25 } }}
+      exit={{ pointerEvents: 'none', y: -140, opacity: 0, transition: { duration: 0.25 } }}
       transition={{ type: 'spring', stiffness: 400, damping: 30 }}
       onClick={() => dispatch({ type: 'openSheet', alert })}
     >
@@ -71,6 +72,60 @@ export function GuardianBanner({ alert }: { alert: AlertItem }) {
   );
 }
 
+/** A message from the child's phone (help request, reply, SOS), dropped in like a banner. */
+export function NoticeBanner({ notice }: { notice: Notice }) {
+  const dispatch = useDemo((s) => s.dispatch);
+  const child = useDemo((s) => childNameOf(s.data));
+  const urgent = notice.tone === 'urgent';
+  useEffect(() => {
+    buzz(urgent ? 3 : 1);
+    if (urgent) return;
+    const t = setTimeout(() => dispatch({ type: 'clearNotice', who: 'guardian' }), 10000);
+    return () => clearTimeout(t);
+  }, [notice.id, urgent, dispatch]);
+  return (
+    <motion.div
+      className={`g-banner g-notice ${notice.tone}`}
+      initial={{ y: -140, opacity: 0, scale: 0.92 }}
+      animate={{ y: 0, opacity: 1, scale: 1 }}
+      exit={{ pointerEvents: 'none', y: -140, opacity: 0, transition: { duration: 0.25 } }}
+      transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+      onClick={() => dispatch({ type: 'clearNotice', who: 'guardian' })}
+    >
+      <div className="g-notice-icon">{urgent ? <Siren size={20} strokeWidth={2.4} /> : <HeartHandshake size={20} strokeWidth={2.4} />}</div>
+      <div className="g-banner-text">
+        <div className="g-banner-meta">
+          <span className="ts-label">{urgent ? 'SOS' : notice.tone === 'warn' ? 'HEADS UP' : `FROM ${child.toUpperCase()}`}</span>
+          <span className="g-banner-time">{notice.time}</span>
+        </div>
+        <div className="g-banner-title">{notice.title}</div>
+        <div className="g-banner-body">{notice.body}</div>
+      </div>
+    </motion.div>
+  );
+}
+
+/** A response button that shows when it has been done (read from the shared case, so every phone agrees). */
+function ActionButton({ kind, alert, className, icon, label, doneLabel, onPress }: { kind: ResponseKind; alert: AlertItem; className: string; icon: ReactNode; label: string; doneLabel: string; onPress: () => void }) {
+  const done = useDemo((s) => s.data.responses.some((r) => r.kind === kind && r.alertId === alert.id));
+  return (
+    <button className={`${className} ${done ? 'is-done' : ''}`} disabled={done} onClick={onPress}>
+      {done ? <Check size={15} strokeWidth={2.6} /> : icon} {done ? doneLabel : label}
+    </button>
+  );
+}
+
+/** Calls the national cybercrime helpline: opens the phone's dialer with 1930 filled in. */
+function useCall1930(alert: AlertItem) {
+  const [note, setNote] = useState<string | null>(null);
+  const call = () => {
+    const opened = openExternal('tel:1930');
+    if (opened) respond('guardian_call', alert.id);
+    setNote(opened ? 'Dialer opened with 1930. Press call when you are ready.' : 'On a phone this opens the dialer with 1930 (cybercrime helpline).');
+  };
+  return { call, note };
+}
+
 /** Lock-screen notification for alert history. */
 export function NotificationCard({ alert }: { alert: AlertItem }) {
   const dispatch = useDemo((s) => s.dispatch);
@@ -79,7 +134,8 @@ export function NotificationCard({ alert }: { alert: AlertItem }) {
     <motion.button
       layout
       layoutId={`card-${alert.id}`}
-      className={`g-notif ${critical ? 'g-notif-critical' : ''} ${alert.historical ? 'g-notif-hist' : ''}`}
+      className={`g-notif ${critical && !alert.withdrawn ? 'g-notif-critical' : ''} ${alert.historical ? 'g-notif-hist' : ''}`}
+      style={alert.withdrawn ? { opacity: 0.72 } : undefined}
       initial={{ opacity: 0, y: 20, scale: 0.95 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       transition={{ type: 'spring', stiffness: 300, damping: 28 }}
@@ -93,23 +149,41 @@ export function NotificationCard({ alert }: { alert: AlertItem }) {
             Day {alert.day} · {alert.time}
           </span>
         </div>
-        <div className="g-notif-title" style={{ color: LEVEL_META[alert.level].color }}>
-          {critical ? 'Critical: ' : ''}
-          {alert.guardianTitle}
-        </div>
-        <div className="g-notif-body">{alert.guardianBody}</div>
+        {alert.withdrawn ? (
+          <>
+            <div className="g-notif-title">
+              Withdrawn: <s>{alert.guardianTitle}</s>
+            </div>
+            <div className="g-notif-body">{alert.withdrawnReason}</div>
+          </>
+        ) : (
+          <>
+            <div className="g-notif-title" style={{ color: LEVEL_META[alert.level].color }}>
+              {critical ? 'Critical: ' : ''}
+              {alert.guardianTitle}
+            </div>
+            <div className="g-notif-body">{alert.guardianBody}</div>
+          </>
+        )}
       </div>
     </motion.button>
   );
 }
 
 /** Expanded Level 2/3 summary: only the minimal guardian payload, never chat text. */
-export function AlertSheet({ alert }: { alert: AlertItem }) {
+/** Each guardian phone opens and closes its own screens; the laptop's drawn phone uses the shared state (defaults). */
+interface ScreenControls {
+  onClose?: () => void;
+  onHelp?: (tab: HelpTab) => void;
+}
+
+export function AlertSheet({ alert, onClose, onHelp, temporary }: { alert: AlertItem; temporary?: boolean } & ScreenControls) {
   const dispatch = useDemo((s) => s.dispatch);
+  const close = onClose ?? (() => dispatch({ type: 'closeSheet' }));
   const dismissals = useDemo((s) => s.data.dismissals);
   const child = useChildName(alert);
   const critical = alert.level === 3;
-  const help = (tab: HelpTab) => dispatch({ type: 'openHelp', alert, tab });
+  const help = onHelp ?? ((tab: HelpTab) => dispatch({ type: 'openHelp', alert, tab }));
 
   return (
     <>
@@ -117,14 +191,14 @@ export function AlertSheet({ alert }: { alert: AlertItem }) {
         className="sheet-scrim"
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        onClick={() => dispatch({ type: 'closeSheet' })}
+        exit={{ pointerEvents: 'none', opacity: 0 }}
+        onClick={close}
       />
       <motion.div
         className={`sheet ${critical ? 'sheet-critical' : ''}`}
         initial={{ y: '100%' }}
         animate={{ y: 0 }}
-        exit={{ y: '100%', transition: { duration: 0.28, ease: [0.4, 0, 1, 1] } }}
+        exit={{ pointerEvents: 'none', y: '100%', transition: { duration: 0.28, ease: [0.4, 0, 1, 1] } }}
         transition={{ type: 'spring', stiffness: 260, damping: 30 }}
       >
         <div className="sheet-grabber" />
@@ -139,7 +213,7 @@ export function AlertSheet({ alert }: { alert: AlertItem }) {
               {alert.historical ? ' · from earlier history' : ''}
             </div>
           </div>
-          <button className="sheet-x" onClick={() => dispatch({ type: 'closeSheet' })} aria-label="Close">
+          <button className="sheet-x" onClick={close} aria-label="Close">
             <X size={15} strokeWidth={2.6} />
           </button>
         </div>
@@ -189,7 +263,7 @@ export function AlertSheet({ alert }: { alert: AlertItem }) {
           </div>
 
           <div className="privacy-line">
-            <Lock size={12} strokeWidth={2.4} /> This alert shows cue types and dates only. Excerpts open only through evidence review in Get help.
+            <Lock size={12} strokeWidth={2.4} /> This alert shows cue types and dates only, never {child}'s messages.
           </div>
           <div className="privacy-line">AI-detected warning signs, not a confirmed offence. Please review with {child} before acting.</div>
 
@@ -198,16 +272,23 @@ export function AlertSheet({ alert }: { alert: AlertItem }) {
               <LifeBuoy size={16} /> Get help
             </button>
             <div className="sheet-actions-row">
-              <button className="btn-glass" onClick={() => help('support')}>
-                <MessageCircleHeart size={15} /> Talk to {child}
-              </button>
-              <button className="btn-glass" onClick={() => help('support')}>
-                <Ban size={15} /> Block contact
-              </button>
+              <ActionButton
+                kind="guardian_talk"
+                alert={alert}
+                className="btn-glass"
+                icon={<MessageCircleHeart size={15} />}
+                label={`Talk to ${child}`}
+                doneLabel={`Check-in sent to ${child}`}
+                onPress={() => respond('guardian_talk', alert.id)}
+              />
+              {alert.category !== 'bullying' && alert.contactId && !temporary ? (
+                <BlockButton alert={alert} />
+              ) : (
+                <ActionButton kind="guardian_trusted" alert={alert} className="btn-glass" icon={<Users size={15} />} label="Trusted adult" doneLabel="Alerted" onPress={() => respond('guardian_trusted', alert.id)} />
+              )}
             </div>
-            <button className="btn-glass" onClick={() => help('support')}>
-              <Users size={15} /> Loop in counsellor
-            </button>
+            <ActionButton kind="guardian_counsellor" alert={alert} className="btn-glass" icon={<Users size={15} />} label="Loop in counsellor" doneLabel="Counsellor notified" onPress={() => respond('guardian_counsellor', alert.id)} />
+            <ResponseLog alertId={alert.id} />
           </div>
         </div>
       </motion.div>
@@ -215,14 +296,40 @@ export function AlertSheet({ alert }: { alert: AlertItem }) {
   );
 }
 
+function BlockButton({ alert }: { alert: AlertItem }) {
+  const blocked = useDemo((s) => s.data.blocks.some((b) => b.contactId === alert.contactId));
+  return (
+    <button className={`btn-glass ${blocked ? 'is-done' : ''}`} disabled={blocked} onClick={() => !isBlocked(alert.contactId) && blockContact(alert.contactId, 'guardian', alert.id)}>
+      {blocked ? <Check size={15} strokeWidth={2.6} /> : <Ban size={15} />} {blocked ? 'Contact blocked' : 'Block contact'}
+    </button>
+  );
+}
+
+/** What has been done about this case so far, from both phones. */
+function ResponseLog({ alertId, dark }: { alertId?: string; dark?: boolean }) {
+  const responses = useDemo((s) => s.data.responses);
+  if (responses.length === 0) return null;
+  return (
+    <div className={`resp-log ${dark ? 'dark' : ''}`}>
+      {responses.slice(-4).map((r) => (
+        <div key={r.id} className={`resp-row ${r.alertId === alertId ? 'this' : ''}`}>
+          <Check size={11} strokeWidth={3} /> <span>{r.label}</span> <em>{r.time}</em>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 /** Level 3: full-screen dark "CRITICAL" takeover with neon border, hazard band and siren glow. */
-export function CriticalTakeover({ alert }: { alert: AlertItem }) {
+export function CriticalTakeover({ alert, onClose, onHelp }: { alert: AlertItem } & ScreenControls) {
   const dispatch = useDemo((s) => s.dispatch);
+  const close = onClose ?? (() => dispatch({ type: 'closeCritical' }));
+  const help = onHelp ?? ((tab: HelpTab) => dispatch({ type: 'openHelp', alert, tab }));
   const child = useChildName(alert);
-  const help = (tab: HelpTab) => dispatch({ type: 'openHelp', alert, tab });
+  const { call, note } = useCall1930(alert);
 
   return (
-    <motion.div className="critical" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, transition: { duration: 0.3 } }}>
+    <motion.div className="critical" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ pointerEvents: 'none', opacity: 0, transition: { duration: 0.3 } }}>
       <div className="critical-vignette" />
       <div className="critical-border" />
 
@@ -230,7 +337,7 @@ export function CriticalTakeover({ alert }: { alert: AlertItem }) {
         className="critical-inner"
         initial={{ scale: 0.9, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
-        exit={{ opacity: 0, x: -40 }}
+        exit={{ pointerEvents: 'none', opacity: 0, x: -40 }}
         transition={{ type: 'spring', stiffness: 220, damping: 22, delay: 0.2 }}
       >
         <HazardStripe tone="amber" height={14} />
@@ -238,7 +345,7 @@ export function CriticalTakeover({ alert }: { alert: AlertItem }) {
           <span className="critical-app">
             <AppIcon size={18} /> RAKSHAK · Day {alert.day} · {alert.time}
           </span>
-          <button className="critical-x" onClick={() => dispatch({ type: 'closeCritical' })} aria-label="Close">
+          <button className="critical-x" onClick={close} aria-label="Close">
             <X size={14} strokeWidth={2.8} />
           </button>
         </div>
@@ -285,16 +392,21 @@ export function CriticalTakeover({ alert }: { alert: AlertItem }) {
             <LifeBuoy size={16} /> Get help
           </motion.button>
           <div className="sheet-actions-row">
-            <button className="btn-glass" onClick={() => help('complaint')}>
-              <Phone size={15} /> 1930 & reporting
+            <button className="btn-glass" onClick={call}>
+              <Phone size={15} /> Call 1930
             </button>
             <button className="btn-glass" onClick={() => help('support')}>
               <HeartHandshake size={15} /> Support {child}
             </button>
           </div>
+          <button className="btn-glass" onClick={() => help('complaint')}>
+            Reporting options
+          </button>
+          {note && <div className="resp-note">{note}</div>}
+          <ResponseLog alertId={alert.id} dark />
         </div>
         <div className="privacy-line dark">
-          <Lock size={11} strokeWidth={2.4} /> Simulated guardian screen · nothing is sent or reported automatically
+          <Lock size={11} strokeWidth={2.4} /> Nothing is sent or reported automatically
         </div>
       </motion.div>
     </motion.div>

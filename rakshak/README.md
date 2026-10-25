@@ -12,7 +12,106 @@ L2 guardian alert, L3 critical) using a deterministic engine. The models label e
 > never proof of an offence. Thresholds are prototype heuristics, not validated probabilities. This is not yet a
 > production on-device mobile app.
 
+**What is in this version**
+
+- **Web demo** (laptop): three modes. *A · Guided Demo* plays scripted examples and two real-world case studies through
+  the live pipeline; *B · Continue the Conversation* loads an earlier chat up to a checkpoint, analyses it, then you type
+  the next messages; *C · Free Chat* starts from nothing. The Studio panel picks the case, the engine drawer shows the
+  evidence, trace and models, and the guardian's **Get help** guides understanding, support, a redacted evidence report
+  and complaint options.
+- **Android app** (phones): one app, one role per phone. Meera's messenger protected by RAKSHAK (private nudges,
+  *Pause before you send* on photos, SOS), Kabir's plain messenger, and **RAKSHAK Guardian** for Amma (lock screen,
+  real Android notifications, alerts, report, Get help, temporary guardians by QR). The phones connect to the laptop by
+  QR code; the guardian's phone only ever receives alert summaries, never the chat.
+- **Inference service** (laptop): RoBERTa + Qwen3.5 4B with verification, fusion, a confirmation gate and case memory.
+  Without Ollama it falls back to clearly labelled keyword rules, so the demo still runs on a laptop without a GPU.
+
 ---
+
+## 0. Team setup (start here)
+
+Do this once on the laptop that will run the demo (Windows, ideally the one with the NVIDIA GPU).
+
+**1. Install the tools** (skip what you already have):
+
+| Tool | Get it | Check |
+|---|---|---|
+| Git | `winget install Git.Git` | `git --version` |
+| Node.js 22 or newer | `winget install OpenJS.NodeJS.LTS` | `node -v` |
+| Python 3.12 | `winget install Python.Python.3.12` | `py -3.12 --version` |
+| Ollama | `winget install Ollama.Ollama` | `ollama -v` |
+
+Close and reopen the terminal after installing so the new commands are found.
+
+**2. Get the code.**
+
+*First time on this laptop:*
+
+```powershell
+cd $HOME\Documents
+git clone https://github.com/S-Aditya-72/Rakshak.git
+cd Rakshak\rakshak
+```
+
+*Already have a copy:* the new version contains everything from the folder you shared, including the changes you had
+not committed yet, so set your local changes aside and pull:
+
+```powershell
+cd path\to\Rakshak
+git stash -u          # puts your uncommitted changes aside (they are already in the new version)
+git checkout master
+git pull
+git stash drop        # throw away the set-aside copy
+cd rakshak
+```
+
+If you changed files after sharing the folder, use `git stash pop` instead of `git stash drop` to get them back on top
+of the new version. If `git pull` still complains, the simplest fix is a fresh copy: rename your old `Rakshak` folder
+and use the *first time* commands above.
+
+**3. Install the dependencies** (inside `rakshak/`, ~10 minutes, needs internet):
+
+```powershell
+npm install
+powershell -ExecutionPolicy Bypass -File scripts/setup-server.ps1    # Python venv, CPU torch, RoBERTa weights
+ollama pull qwen3.5:4b                                               # ~3.3 GB
+```
+
+**4. Run it** (two terminals, both inside `rakshak/`; keep them open):
+
+```powershell
+npm run server:lan     # terminal 1: inference service + phone relay (prints the laptop's address and an access code)
+npm run dev            # terminal 2: web UI on http://127.0.0.1:5280
+```
+
+The Ollama app must be running (or run `ollama serve` in a third terminal). The first time, Windows Firewall asks about
+Python: allow **Private networks**. Then open **http://127.0.0.1:5280** (web demo) or
+**http://127.0.0.1:5280/#/engine** (projector view for the phone demo). The status pill at the top right says whether
+RoBERTa and Qwen are ready.
+
+*On a laptop without Ollama/GPU* use the rules fallback and skip the RoBERTa download time (Command Prompt syntax):
+
+```bat
+set RAKSHAK_ROBERTA_ENABLED=0
+set RAKSHAK_WARMUP=0
+npm run server:lan
+```
+
+(In PowerShell: `$env:RAKSHAK_ROBERTA_ENABLED="0"; $env:RAKSHAK_WARMUP="0"; npm run server:lan`.)
+
+**5. The phones** (optional, for the real-phone demo; details in [MOBILE.md](MOBILE.md)):
+
+1. Download [`apk/RAKSHAK-debug.apk`](apk/RAKSHAK-debug.apk) from GitHub on each phone (or copy it over) and install it.
+   If Android refuses to update an older RAKSHAK, uninstall that one first. Every phone needs this same APK.
+2. Put the laptop and all phones on the **same Wi-Fi, or a phone hotspot** (college Wi-Fi often blocks devices from
+   seeing each other).
+3. Laptop: open `/#/engine` → **Connect phones**. Each phone: RAKSHAK → **Scan QR code** → choose Meera, Kabir or Amma.
+4. Laptop: **C · Free Chat** → Studio → *Start new conversation*, then type on Kabir's phone. Meera gets nudges, Amma
+   gets notifications.
+
+**6. After pulling new code later:** run `npm install` again, restart both terminals, and reinstall the APK on the
+phones if `apk/RAKSHAK-debug.apk` changed. Rebuilding the APK yourself (`npm run apk`) needs Android Studio and is only
+needed after changing the web code.
 
 ## 1. Architecture
 
@@ -35,6 +134,9 @@ L2 guardian alert, L3 critical) using a deterministic engine. The models label e
 | Prompts | `prompts/` | `analysis_system.v2.md` (Qwen + ChatGPT), `verify_findings.v2.md` (v1 kept for comparison) |
 | Scenarios | `scenarios/` | 5 demo test cases + `scenarios/eval/` extra fixtures, with `expect` blocks used only by the evaluator |
 | Web UI | `apps/web` | Existing design, now wired to real analysis |
+| Android app | `apps/web/android` | Capacitor app, one role per phone: Meera's protected messenger, Kabir's plain messenger, RAKSHAK Guardian (alerts, report, temporary guardians, Android notifications). QR setup. See [MOBILE.md](MOBILE.md) |
+| Device sync | `/api/sync` | WebSocket relay between the laptop and the phones. Guardian phones only receive alert summaries; the relay drops any guardian-bound frame carrying chat content (`apps/server/rakshak_server/relay.py`, `apps/web/src/lib/sync.ts`) |
+| Temporary guardians | `/api/guardians/*` | Time-limited invite codes (QR from the guardian's phone), scope all/critical, revocable; expiry enforced by the server |
 
 ### What is ours and what is not
 
@@ -100,6 +202,14 @@ npm run dev                  # web UI on http://127.0.0.1:5280
 npm run companion            # optional: ChatGPT backend (see §6)
 ```
 
+**Phones / the Android app:** run `npm run server:lan` instead of `npm run server`. It listens on the network and
+prints the server address(es) and an access code (saved in `data/access-token`, so it survives restarts). The easiest
+way to give both to a phone is the QR code under **Connect phones** on `/#/engine` (the app also accepts them typed in).
+Requests from this laptop never need the code; requests from anywhere else (Wi-Fi, or a
+`cloudflared tunnel --url http://127.0.0.1:8787` link) must send it, and are refused when no code is set. The ChatGPT
+backend stays usable only from the laptop itself. On Windows, allow Python through the firewall for Private networks the
+first time.
+
 Open `http://127.0.0.1:5280`. The status pill (top right of the simulation) shows real model status; click it to refresh.
 
 | Route | |
@@ -110,6 +220,8 @@ Open `http://127.0.0.1:5280`. The status pill (top right of the simulation) show
 | `/#/sim?mode=C` | **C · Free Chat**: Studio panel → *Start new conversation*; type on either phone, ✎ creates private or group chats |
 | `/#/predator`, `/#/victim` | Pop-out single phones (other participants / the child) |
 | `/#/console` | Pop-out guardian phone + engine panels (stays in sync) |
+| `/#/engine` | Projector view for the real-phone demo: engine panels + devices (what each phone received) + Connect-phones QR |
+| `/#/app`, `/#/m/child`, `/#/m/contact`, `/#/m/guardian`, `/#/m/temp` | The Android app's screens (setup, then one role per phone); they also open in a phone browser |
 
 Shortcuts: `Space` play/pause · `→` step · `S` Studio panel · `E` engine drawer · `R` reset (restarts the current case
 from its own starting point and clears its server memory). Switching modes, or a `?mode=` in the URL, never resets the case.
@@ -158,7 +270,11 @@ from its own starting point and clears its server memory). Switching modes, or a
 - **Get help** (guardian, from L2/L3 alerts): understand the concern (recorded messages, AI interpretations and the
   deterministic level shown separately), support the child, review evidence and export a redacted HTML/JSON report, and
   complaint options (standard complaint, anonymous-reporting eligibility, official portal). Nothing is submitted or sent;
-  blocks are simulator-only.
+  blocks only affect the demo. On the guardian's Android phone Get help works from the alert summary only: evidence
+  review and the report stay on the laptop (see [MOBILE.md](MOBILE.md)).
+- **Phones.** With the Android app connected, the laptop's mode and case drive the phones: they follow a new case or a
+  loaded history, type in B and C, and Amma's phone raises real notifications (not for alerts found in history; a
+  withdrawn alert gets a calm update).
 - **Engine drawer** tabs: *Case* (score ring, tracks, chart), *Evidence* (case memory grouped by chat, with model
   provenance, status and target), *Trace* (per message: RoBERTa score, Qwen verdict, fusion agreement, rule trace,
   measured latency, and the context the model was given: messages, approximate tokens, truncation, related findings),
@@ -195,14 +311,20 @@ participants, so Qwen cannot cite messages or people that are not there. Transcr
 findings `{message, context_basis, cue, target, modifier (none/banter/quoted/counterspeech), confidence (low/medium/high)}`,
 patterns, retractions and an assessment (harmless / concerning / harmful / uncertain). The schema orders these fields so
 the model states context before any verdict. The verification pass gets the same whole transcript, and any finding the
-model's own whole-chat assessment contradicts goes to needs_review (it cannot raise an alert on its own). Qwen never sees RoBERTa's output and is
+model's own whole-chat assessment contradicts is dropped or left pending (it cannot raise an alert on its own). Qwen never sees RoBERTa's output and is
 never gated on it. Settings: temperature 0, top_k 1, fixed seed, `think:false`, structured output, `keep_alive 30m`,
 one request at a time on the GPU.
 
-**Verification.** New findings that RoBERTa does not corroborate get a second, narrow Qwen pass: "does this message
-itself show <cue definition>?" Unsupported claims are dropped (listed in the run's warnings), unclear ones become
-`needs_review`. This was added after real runs showed the 4B model labelling a supportive friend or "how was school
-today?" as harmful.
+**Verification.** New findings that RoBERTa does not corroborate get a second Qwen pass over the same whole transcript:
+"does this message, in this chat, show <cue definition>?" Unsupported claims are dropped (listed in the run's warnings),
+unclear ones stay pending. This was added after real runs showed the 4B model labelling a supportive friend or "how was
+school today?" as harmful.
+
+**Confirmation gate.** Only confirmed evidence is *active* (scored, can raise alerts); everything else is *needs review*
+(pending: recorded and shown, never scored). A harmful reading is confirmed only if the whole-chat assessment is
+concerning or harmful, verification did not answer "unclear", a request cue (photo, meeting, personal info) is resolved
+as being about the child, and the finding is high-confidence, corroborated by RoBERTa, or still held after later
+messages. The rules fallback reports its phrase matches at high confidence, so it passes the same gate.
 
 **Fusion** (`apps/server/rakshak_server/fusion.py`):
 
@@ -211,9 +333,10 @@ today?" as harmful.
 | Qwen flags bullying, RoBERTa ≥ 0.5 | `agree`, strength = max of both, one evidence row |
 | Qwen flags harm, RoBERTa < 0.5 (or a grooming cue, outside RoBERTa's scope) | `contextual_only`, active |
 | RoBERTa ≥ 0.5, context says banter/quote/counterspeech or the chat is harmless | `context_override`, recorded but not scored |
-| RoBERTa ≥ 0.5, Qwen silent | `needs_review` (model disagreement), half weight, no floors |
-| Qwen unavailable | RoBERTa-only `needs_review` evidence, run marked degraded |
-| Mild cue inside a run Qwen itself called harmless | `needs_review` |
+| RoBERTa ≥ 0.5, Qwen silent | `needs_review` (model disagreement), pending: not scored |
+| Qwen unavailable | rules fallback (labelled), or with it off RoBERTa-only `needs_review` evidence, run marked degraded |
+| Serious label inside a run Qwen itself called harmless | dropped (`context_override`) |
+| Medium/low confidence, no corroboration yet | `needs_review` until a later reading still supports it |
 
 **Memory and reconciliation.** SQLite tables: protected_children, participants, conversations,
 conversation_participants, messages, evidence_events, cases, risk_snapshots, analysis_runs, alerts (+ dismissals,
@@ -231,7 +354,7 @@ manipulation 1, personal-info request 2, image/meeting request 3, disable protec
 humiliation 1.5, exclusion 1, intimidation 3. Decay half-life 7 days. Secrecy/isolation → image/meeting request ×2.
 Thresholds L1 2, L2 5, L3 9. Floors: threat/coercion → L3; disable protection → L2; image/meeting request from a contact
 first seen < 14 days → L2; intimidation → L2. Reductions: quote/counterspeech ×0.3, banter ×0.1 (only for insult,
-humiliation, exclusion; never threats or grooming cues), needs-review ×0.5, dismissal ×0.5 (never below L1, never at
+humiliation, exclusion; never threats or grooming cues), needs-review evidence not scored, dismissal ×0.5 (never below L1, never at
 request/coercion stage). Grooming is scored per contact; bullying is one child-level track summed across senders and
 chats, with bonuses for pile-ons (3 senders in 7 days +2), cross-chat targeting (2 chats in 7 days +1) and repetition
 (3 cues from one sender +1). Bullying without a threat is capped at L2 (parent + counsellor route). The child's own
@@ -285,6 +408,7 @@ npm run e2e -- live "message one" "message two"                     # C: fresh c
 npm run e2e -- history s2-bullying asked-to-stop "msg" "child:msg"   # B: history checkpoint, then live (child: = child's phone)
 E2E_HELP=1 npm run e2e -- history cs-rapid-sextortion first-demand "child:i'm telling my dad"   # + Get help/report check
 E2E_STOP_AT=9 E2E_LIVE='["a live message"]' npm run e2e -- scenario cs-sustained-coercion       # A → continue live
+npm run apk                                    # Android app → apk/RAKSHAK-debug.apk (needs Android Studio)
 ```
 
 Unit tests: Vitest covers the engine (unchanged golden fixtures), mode/history rules (`lib/flow.test.ts`), store
@@ -314,6 +438,8 @@ Environment variables, all prefixed `RAKSHAK_` (defaults in brackets). No `.env`
 | Area | Variables |
 |---|---|
 | Service (`apps/server/rakshak_server/config.py`) | `HOST` (127.0.0.1), `PORT` (8787), `DATA_DIR` (`rakshak/data`), `LOG_TEXT` (0: raw chat text is not logged) |
+| Remote access | `ACCESS_TOKEN` (empty: remote requests refused; `server:lan` sets one), `CORS_ORIGINS` (http://localhost, https://localhost, capacitor://localhost) |
+| Rules fallback | `RULES_FALLBACK` (1): when Ollama is unreachable or the model is not pulled, local analysis uses keyword rules (labelled "rules fallback", never shown as AI) instead of failing |
 | RoBERTa | `ROBERTA_MODEL` (nayan90k/roberta-finetuned-cyberbullying-detection), `ROBERTA_ENABLED` (1), `ROBERTA_DEVICE` (cpu \| cuda \| mps \| auto), `ROBERTA_THRESHOLD` (0.5) |
 | Qwen / Ollama | `OLLAMA_URL` (http://127.0.0.1:11434), `QWEN_MODEL` (qwen3.5:4b), `QWEN_NUM_CTX` (16384; use 8192 if VRAM is tight), `QWEN_NUM_PREDICT` (1200), `QWEN_TIMEOUT_S` (120), `QWEN_KEEP_ALIVE` (30m), `QWEN_SEED` (7), `VERIFY` (1), `WARMUP` (1) |
 | Context | `CONTEXT_TOKEN_BUDGET` (11000), `RELATED_EVIDENCE_LIMIT` (12) |
@@ -336,9 +462,9 @@ Scoring rules: `packages/engine/config.json`.
 - Counterspeech keeps the Plan's ×0.3 weight, so a friend defending the child adds a small amount (it never names the
   friend as an offender). Set `reductions.counterspeech` to 0 in the engine config if you prefer.
 - The demo scenarios were written by the team; passing them is not evidence of general accuracy.
-- Window sync uses BroadcastChannel (one browser on one machine). The guardian phone is a simulated screen, not
-  authenticated delivery to a separate device, and the phones are not doing on-device inference: local analysis runs on
-  the host laptop (127.0.0.1).
+- The relay keeps no history: a chat phone that joins late gets a snapshot from a connected chat device, a guardian
+  phone gets the current alert summary. Notifications need the app running (foreground or the guardian's background
+  service); there is no push service. The Android app is a debug build and has not been tested on every Android version.
 - In a rehearsal of the group pile-on, RoBERTa flagged Riya's quoted defence and a harmless message of hers without Qwen
   agreeing; both became *needs review* evidence at half weight, so she was listed among the bullying track's senders.
   The case studies' "Observed in this run" panel and the trace show such misses rather than hiding them.

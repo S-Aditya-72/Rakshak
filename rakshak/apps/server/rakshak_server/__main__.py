@@ -13,6 +13,8 @@ def main() -> None:
     s = load_settings()
     if s.host not in ("127.0.0.1", "localhost", "::1"):
         logging.getLogger("rakshak").warning("Binding to %s: the service is reachable from other machines.", s.host)
+        if not s.access_token:
+            logging.getLogger("rakshak").warning("RAKSHAK_ACCESS_TOKEN is not set, so every remote request will be refused.")
     uvicorn.run(create_app(s), host=s.host, port=s.port, log_level="info")
 
 

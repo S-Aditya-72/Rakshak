@@ -83,7 +83,7 @@ export type Agreement = 'agree' | 'contextual_only' | 'context_override' | 'need
 
 export type EvidenceStatus = 'active' | 'needs_review' | 'superseded' | 'suppressed';
 
-export type ModelSource = 'roberta' | 'qwen' | 'chatgpt';
+export type ModelSource = 'roberta' | 'qwen' | 'chatgpt' | 'rules';
 
 // ---------- entities ----------
 
@@ -165,6 +165,8 @@ export interface ModelFinding {
   rationale: string;
   /** Earlier messages that shaped this reading, as the model stated them ("no earlier context" if none). */
   contextBasis?: string | null;
+  /** Request cues only: child | everyday_thing | unclear, as the model resolved it from the chat. */
+  requestedSubject?: string | null;
   /** Verification pass result: supported | unclear | corroborated | known; absent when not run. */
   verification?: string | null;
 }

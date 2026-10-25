@@ -1,0 +1,91 @@
+{
+  "child": {
+    "id": "p-meera",
+    "name": "Meera"
+  },
+  "participants": [
+    {
+      "id": "p-kabir",
+      "name": "Kabir",
+      "role": "contact"
+    }
+  ],
+  "conversations": [
+    {
+      "id": "e7-c",
+      "kind": "private",
+      "title": "Kabir",
+      "participants": [
+        "p-meera",
+        "p-kabir"
+      ]
+    }
+  ],
+  "id": "e7-unfinished",
+  "title": "Unfinished thought resolved by the next message (homework)",
+  "messages": [
+    {
+      "conv": "e7-c",
+      "from": "p-kabir",
+      "day": 1,
+      "time": "10:29 PM",
+      "text": "hey"
+    },
+    {
+      "conv": "e7-c",
+      "from": "p-kabir",
+      "day": 1,
+      "time": "10:29 PM",
+      "text": "did u complete todays homework"
+    },
+    {
+      "conv": "e7-c",
+      "from": "p-meera",
+      "day": 1,
+      "time": "10:29 PM",
+      "text": "yes"
+    },
+    {
+      "conv": "e7-c",
+      "from": "p-kabir",
+      "day": 1,
+      "time": "10:29 PM",
+      "text": "can u send pics"
+    },
+    {
+      "conv": "e7-c",
+      "from": "p-meera",
+      "day": 1,
+      "time": "10:29 PM",
+      "text": "wait i will"
+    },
+    {
+      "conv": "e7-c",
+      "from": "p-kabir",
+      "day": 1,
+      "time": "10:29 PM",
+      "text": "not just that"
+    },
+    {
+      "conv": "e7-c",
+      "from": "p-kabir",
+      "day": 1,
+      "time": "10:29 PM",
+      "text": "yesterday's homework too"
+    }
+  ],
+  "expect": {
+    "level": [
+      0,
+      0
+    ],
+    "categories": [],
+    "target": null,
+    "offenders": [],
+    "nonOffenders": [
+      "p-kabir"
+    ],
+    "mustNotAlert": true,
+    "notes": "Message 6 is ambiguous until message 7 arrives; nothing may be acted on before it is resolved."
+  }
+}

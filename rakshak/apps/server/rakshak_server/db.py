@@ -147,6 +147,8 @@ MIGRATIONS = (
     ("protected_children", "origin", "TEXT"),
     ("protected_children", "checkpoint", "INTEGER"),
     ("alerts", "historical", "INTEGER NOT NULL DEFAULT 0"),
+    ("alerts", "withdrawn", "INTEGER NOT NULL DEFAULT 0"),
+    ("alerts", "withdrawn_reason", "TEXT"),
 )
 
 
@@ -346,6 +348,13 @@ class Store:
             [run_id, child_id, backend, conv_id, request_id, upto_seq, status, json.dumps(result), time.time()],
         )
 
+    def last_reading(self, conv_id: str, backend: str) -> Optional[str]:
+        """The whole-chat reading from the latest successful run on this conversation (fed back for consistency)."""
+        rows = self._q("SELECT result FROM analysis_runs WHERE conversation_id=? AND backend=? AND status='ok' ORDER BY upto_seq DESC, created_at DESC LIMIT 1", [conv_id, backend])
+        if not rows:
+            return None
+        return (json.loads(rows[0]["result"]).get("conversationReading") or None)
+
     def runs(self, child_id: str, limit: int = 200) -> list[dict]:
         rows = self._q("SELECT result FROM analysis_runs WHERE child_id=? ORDER BY created_at DESC LIMIT ?", [child_id, limit])
         return [json.loads(r["result"]) for r in reversed(rows)]
@@ -383,13 +392,28 @@ class Store:
             )
             return True
 
+    def withdraw_alert(self, child_id: str, alert_id: str, backend: str, reason: str) -> bool:
+        """Mark an alert withdrawn (its evidence was retracted) and re-arm its track so new confirmed evidence can alert."""
+        with self.tx():
+            rows = self._q("SELECT track_key, withdrawn FROM alerts WHERE id=? AND child_id=? AND backend=?", [alert_id, child_id, backend])
+            if not rows or rows[0]["withdrawn"]:
+                return False
+            self._x("UPDATE alerts SET withdrawn=1, withdrawn_reason=? WHERE id=?", [reason, alert_id])
+            alerted = self.alerted(child_id, backend)
+            alerted.pop(rows[0]["track_key"], None)
+            self._x(
+                "INSERT INTO cases(child_id, backend, alerted, updated_at) VALUES (?,?,?,?) ON CONFLICT(child_id, backend) DO UPDATE SET alerted=excluded.alerted, updated_at=excluded.updated_at",
+                [child_id, backend, json.dumps(alerted), time.time()],
+            )
+            return True
+
     def alerted(self, child_id: str, backend: str) -> dict[str, int]:
         rows = self._q("SELECT alerted FROM cases WHERE child_id=? AND backend=?", [child_id, backend])
         return json.loads(rows[0]["alerted"]) if rows else {}
 
     def alerts(self, child_id: str) -> list[dict]:
-        rows = self._q("SELECT id, backend, track_key AS trackKey, level, day, time, title, body, historical FROM alerts WHERE child_id=? ORDER BY created_at", [child_id])
-        return [{**dict(r), "historical": bool(r["historical"])} for r in rows]
+        rows = self._q("SELECT id, backend, track_key AS trackKey, level, day, time, title, body, historical, withdrawn, withdrawn_reason AS withdrawnReason FROM alerts WHERE child_id=? ORDER BY created_at", [child_id])
+        return [{**dict(r), "historical": bool(r["historical"]), "withdrawn": bool(r["withdrawn"])} for r in rows]
 
     def add_dismissal(self, child_id: str, day: int, track_key: Optional[str]) -> None:
         self._x("INSERT INTO dismissals(child_id, day, track_key) VALUES (?,?,?)", [child_id, day, track_key])

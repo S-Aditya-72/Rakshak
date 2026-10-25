@@ -1,7 +1,7 @@
 # RAKSHAK: Handoff
 
 **Team Git Happens** (M Sarvesh, Naren K, S Aditya, Mohit Kumar). ChronoForge 2026, NITK Surathkal, Cybersecurity track, theme "Cities of the Future".
-Last updated: 2026-10-24 (three demo modes, history continuation, case studies, guardian Get help).
+Last updated: 2026-10-25 (web v2 merged with the phone apps: three demo modes, history continuation, case studies, guardian Get help; per-role Android apps, QR setup, guardian app, temporary guardians). Setup for a new laptop: [`rakshak/README.md`](rakshak/README.md#0-team-setup-start-here). Phones: [`rakshak/MOBILE.md`](rakshak/MOBILE.md).
 
 This file records what exists today, how to run it, how it fits together, and what is still open. Read it next to
 [`Plan.md`](Plan.md) (original architecture), [`rakshak/README.md`](rakshak/README.md) (setup and pipeline details) and
@@ -24,8 +24,10 @@ the Round 1 proposal PDF.
 | Case studies | ✅ Amanda Todd and Jordan DeMay: sourced background, fictional recreation (clearly labelled), playback, continue live, support vs documented events, sources |
 | Guardian Get help | ✅ From L2/L3 alerts: understand (recorded vs AI vs deterministic), support the child, evidence review with redaction and HTML/JSON export, complaint options (standard, anonymous-eligibility check, official portal). Status always "Not submitted" |
 | ChatGPT backend (Sign in with ChatGPT) | 🟡 Implemented with the official SDK in a localhost companion. **Sign-in and cloud inference not yet tested** (needs the owner's account). Compliance caveat in README §6 |
-| Tests | ✅ 50 Vitest (23 engine/contract unchanged + 27 web: modes, history, store transitions, report/redaction) + 51 server pytest (37 existing + 14 history/continuation) + browser e2e (scenario, history, live, Get help) + real-model eval harness |
-| Realtime relay across devices (Socket.IO) | ❌ Not started (BroadcastChannel only) |
+| Tests | ✅ 56 Vitest (engine/contract + web: modes, history, store transitions, report/redaction, withdrawals) + 93 server pytest (pipeline, history/continuation, confirmation gate, remote access, sync relay, rules fallback) + browser e2e (scenario, history, live, Get help) + real-model eval harness |
+| Android app (Capacitor 8) | ✅ `rakshak/apk/RAKSHAK-debug.apk` (committed). One role per phone: Meera's protected messenger, Kabir's plain messenger, RAKSHAK Guardian (lock screen, Android notifications, Home/Alerts/Report/Settings, Get help), temporary guardian. QR setup. Tested on an Android 16 emulator and real phones |
+| Cross-device sync | ✅ Relay `/api/sync` (`relay.py`): chat devices share the case; guardian phones get alert summaries only and the relay drops guardian-bound frames carrying chat content. Temporary-guardian invites (`/api/guardians/*`) with server-side expiry/revoke. Laptop projector view `/#/engine` shows what each device received |
+| Git | ✅ GitHub `S-Aditya-72/Rakshak`, branch `master` |
 | Launch video (`/brag`) | ✅ Unchanged |
 
 ---
@@ -36,9 +38,15 @@ the Round 1 proposal PDF.
 Chronoforge/
 ├─ HANDOFF.md, Plan.md, proposal PDF, screenshot
 └─ rakshak/                         npm workspace root (README.md has full setup)
-   ├─ package.json                  scripts: dev, build, server, companion, test, test:server, eval, e2e, setup:siwc
+   ├─ package.json                  scripts: dev, build, server, server:lan, apk, companion, test, test:server, eval, e2e, setup:siwc
+   ├─ MOBILE.md                     Android app: install, connect, run the demo, troubleshooting
+   ├─ apk/                          (git-ignored) RAKSHAK-debug.apk from `npm run apk`
    ├─ apps/
-   │  ├─ web/                       React UI (Vite :5280, proxies /api → :8787)
+   │  ├─ web/                       React UI (Vite :5280, proxies /api and the /api/sync WebSocket → :8787)
+   │  │  ├─ src/mobile/             Setup (/app), ChatApp (child/contact), GuardianApp (guardian/temp)
+   │  │  ├─ src/qr/                 QR codes: generate, scan (jsQR), pairing format
+   │  │  ├─ src/lib/sync.ts         cross-tab + cross-device sync (BroadcastChannel + relay)
+   │  │  └─ android/                Capacitor Android project (icon, splash, cleartext, portrait)
    │  ├─ server/                    Python FastAPI inference service (:8787) + pytest suite
    │  │  └─ rakshak_server/         app, pipeline, context, analyzers (Qwen/ChatGPT), roberta, fusion, validation, db, scenarios
    │  └─ siwc-companion/            Node, official @siwc/local SDK, holds ChatGPT tokens (:8788), standalone package
@@ -64,11 +72,14 @@ npm install
 powershell -ExecutionPolicy Bypass -File scripts/setup-server.ps1   # Windows; macOS: bash scripts/setup-server.sh
 ollama pull qwen3.5:4b
 npm run server        # :8787 (RoBERTa loads once in the background, Qwen warms up)
+npm run server:lan    # same, but reachable by the phones: prints address + access code (see MOBILE.md)
 npm run dev           # http://127.0.0.1:5280
 npm run companion     # optional ChatGPT backend, after: npm run setup:siwc
 ```
 
-- Port **5280** (strictPort, 127.0.0.1). The service and companion also bind to 127.0.0.1 only.
+- Port **5280** (strictPort, 127.0.0.1). The service binds to 127.0.0.1 unless started with `server:lan`; the companion always does.
+- Remote clients (phones, tunnels) must send the access code; the laptop's own browser never needs it. The ChatGPT
+  backend refuses anything that is not from the laptop itself.
 - The status pill in the simulation's top-right corner shows the real model state. Click it to refresh.
 - `R` / reset restarts the current case from its own starting point (script start, history checkpoint, or a new
   conversation) and clears its server-side memory. Switching modes never resets anything.
@@ -81,7 +92,10 @@ npm run companion     # optional ChatGPT backend, after: npm run setup:siwc
 | `/#/sim?mode=A` | A · Guided Demo (Studio panel → pick an example or case study → Play) |
 | `/#/sim?mode=B` | B · Continue the Conversation (Studio panel → conversation → checkpoint → Load history) |
 | `/#/sim?mode=C` | C · Free Chat (Studio panel → Start new conversation) |
-| `/#/predator`, `/#/victim`, `/#/console` | Pop-out windows (BroadcastChannel sync) |
+| `/#/predator`, `/#/victim`, `/#/console` | Pop-out windows (synced) |
+| `/#/app` | Android app home: Scan QR / enter address and code, role picker, offline demo (the app opens here) |
+| `/#/m/child`, `/#/m/contact`, `/#/m/guardian`, `/#/m/temp` | Phone roles (the app reopens into the saved one) |
+| `/#/engine` | Projector view: engine panels + Devices + Connect phones QR (V toggles drawn phones) |
 
 Shortcuts: `Space` play/pause · `→` step · `S` studio panel · `E` engine drawer · `R` reset. A `?mode=` in the URL only selects the view.
 
@@ -97,6 +111,8 @@ Shortcuts: `Space` play/pause · `→` step · `S` studio panel · `E` engine dr
 | Inference service | Python 3.12, FastAPI, uvicorn, httpx, SQLite (WAL) |
 | Models | `nayan90k/roberta-finetuned-cyberbullying-detection` (transformers + torch CPU), `qwen3.5:4b` Q4_K_M via Ollama 0.40 |
 | ChatGPT | `@siwc/local` (OpenAI DevKit, Noncommercial licence) in a Node 22+ companion |
+| Android | Capacitor 8.5 (haptics, keep-awake, app, keyboard, local-notifications, share) + own plugins ScreenColor and GuardianService (foreground service), Gradle 8.14, AGP 8.13, compile/target SDK 36, min SDK 24 |
+| Sync | FastAPI WebSocket relay (`websockets` 17) + BroadcastChannel; message ids de-duplicate the two routes |
 
 ---
 
@@ -106,7 +122,7 @@ The landing page, phones, alert system, console and launch video from the previo
 same visuals. What changed:
 
 - **Simulation** (`pages/Simulation.tsx`): status pill (real model state); Settings has *Analysis backend*
-  (Hybrid · Local / ChatGPT · Cloud), the ChatGPT connection panel, and a *Test case* picker; the dock gets
+  (Hybrid · Local / ChatGPT · Cloud) and the ChatGPT connection panel; modes and cases are picked in the Studio panel; the dock gets
   **Analyze with ChatGPT** when the cloud backend is selected; the progress bar marks where alerts *actually* fired.
 - **Engine drawer**: tabs *Case*, *Evidence* (case memory with provenance), *Trace* (per-message RoBERTa score, Qwen
   verdict, fusion agreement, rule trace, measured latency), *Models* (live status + full validated latest run). ↻
@@ -159,9 +175,15 @@ URLs (noted in the UI). **Re-check the live pages before presenting.**
 
 ### 4.3 Guardian Get help
 
-Opened from the L2/L3 alert sheet or the L3 takeover (*Get help*, *Talk to*, *Block contact*, *Loop in counsellor*,
-*1930 & reporting*, *Support*). It always uses the selected alert's own case (`caseKey`); if that case is gone it says so
-and shows nothing from another case.
+Opened from the L2/L3 alert sheet or the L3 takeover (*Get help*, *Support*, *Reporting options*). The alert's own
+buttons keep their one-tap effects on every phone (*Talk to Meera* sends a check-in, *Block contact* blocks in the demo
+messenger, *Loop in counsellor* is logged, *Call 1930* opens the dialer). It always uses the selected alert's own case
+(`caseKey`); if that case is gone it says so and shows nothing from another case.
+
+**On the guardian's Android phone** Get help runs full screen from the alert summary only (that phone never receives
+messages or model output): *Understand* lists the cue types and days and the rule trace, *Evidence & report* says the
+evidence stays on the child's phone, and the Support/Complaint buttons send the same shared responses (check-in, block,
+counsellor note, *Mark as handled* closes CRITICAL everywhere). Links and helpline numbers open outside the app.
 
 1. **Understand:** concern summary; *recorded messages* (refs, chats, days, no text), *AI interpretations* (status,
    agreement, uncertainty), *deterministic risk level* (score, rule trace) kept visually separate.
@@ -229,6 +251,9 @@ Key engineering points for judges:
 ## 8. What is pending
 
 ### 8.1 Before the demo
+- [ ] Install the new `rakshak/apk/RAKSHAK-debug.apk` on the demo phones and run through MOBILE.md once on the demo laptop (restart `npm run server:lan` after pulling)
+- [ ] Try the QR scan with a real camera, and RAKSHAK's background service on the demo phones' brands (battery savers)
+      (firewall prompt, hotspot, address + code, all three roles, one Mode A case and one Mode B exchange).
 - [ ] **Owner:** run `npm run setup:siwc`, `npm run companion`, then *Continue with ChatGPT* in Settings. Confirm a model is
       listed and one owner-initiated analysis works. Until then the ChatGPT path is untested. Decide whether to show it at
       all given the Terms caveat (README §6).
@@ -245,7 +270,6 @@ Key engineering points for judges:
 - [ ] Latency grows with very long chats; the context budget keeps evidence but drops plain older chatter.
 
 ### 8.3 Not started (from Plan.md)
-- [ ] Socket.IO relay so live chat works across devices (§7.4 of the old plan). Guardian screens are simulated in the same browser.
 - [ ] In-browser on-device model (ONNX) for a true phone story. The current "local" backend runs on the laptop.
 - [ ] "3 setups" comparison view (keyword vs model vs model + memory).
 - [ ] Encrypted-at-rest case memory (SQLite is plain on disk; synthetic data only).
@@ -263,7 +287,15 @@ Key engineering points for judges:
 ## 10. Gotchas
 
 - Port 5173 is someone else's app on this machine. Use **5280**.
-- Anything that writes lots of files inside `apps/web/` triggers Vite reloads unless it is in `server.watch.ignored`.
+- Anything that writes lots of files inside `apps/web/` triggers Vite reloads unless it is in `server.watch.ignored`
+  (`android/` is ignored, because `cap sync` copies the build there).
+- Gradle downloads time out on networks with broken IPv6: set `JAVA_OPTS=-Djava.net.preferIPv4Stack=true` (`npm run apk` does).
+- Only the laptop starts test cases or switches modes; phones keep their own open chat and screens. The offline demo
+  is disabled while a phone is connected so it cannot overwrite the shared case.
+- Zustand selectors must return stable values: `useDemo((s) => s.data.alerts.filter(...))` re-renders forever
+  (React #185). Filter in `useMemo` instead.
+- Overlay exits use `pointerEvents: 'none'`: a stalled exit animation otherwise leaves an invisible layer catching taps.
+- Notifications need `isExactNotification: false`, or the plugin opens Android's exact-alarm settings page.
 - A full HMR reload resets the in-browser state; the server-side case memory survives and is re-hydrated.
 - Chat auto-scroll must run inside `requestAnimationFrame`, after the new bubble is laid out.
 - Phones are scaled with `--phone-scale`. Don't hard-code pixel sizes in phone content.

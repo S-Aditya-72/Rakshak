@@ -1,6 +1,11 @@
 import { motion, useAnimationControls } from 'framer-motion';
-import { useEffect, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, type ReactNode } from 'react';
 import { ShieldCheck } from 'lucide-react';
+import { useClock } from '../lib/hooks';
+import { SyncPill } from '../mobile/SyncPill';
+
+/** True inside the Android app's role screens: the real phone is the frame, so the drawn iPhone shell is dropped. */
+export const BareContext = createContext(false);
 
 interface PhoneFrameProps {
   theme?: 'light' | 'dark';
@@ -20,6 +25,14 @@ export function PhoneFrame({ theme = 'light', shakeKey, children }: PhoneFramePr
     });
   }, [shakeKey, controls]);
 
+  if (useContext(BareContext)) {
+    return (
+      <motion.div className={`phone bare ${theme}`} animate={controls}>
+        <div className="phone-screen">{children}</div>
+      </motion.div>
+    );
+  }
+
   return (
     <motion.div className={`phone ${theme}`} animate={controls}>
       <div className="phone-btn phone-btn-l1" />
@@ -35,10 +48,14 @@ export function PhoneFrame({ theme = 'light', shakeKey, children }: PhoneFramePr
 }
 
 export function StatusBar({ shield = false }: { shield?: boolean }) {
+  // On a real phone Android draws the time and battery; RAKSHAK only shows its connection state, and only when it is not live.
+  const bare = useContext(BareContext);
+  const clock = useClock();
+  if (bare) return <SyncPill />;
   return (
     <div className="status-bar">
       <div className="status-left">
-        <span>9:41</span>
+        <span>{clock.time}</span>
         {shield && (
           <span className="rakshak-pill" title="Simulated phone: analysis runs on the host laptop, not on this phone">
             <ShieldCheck size={11} strokeWidth={2.6} />

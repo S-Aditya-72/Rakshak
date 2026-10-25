@@ -2,7 +2,8 @@
 
 1. The active conversation's history (oldest first), always including the focus messages and every message
    that already carries evidence, then filling newest-first until the token budget is spent.
-2. Prior findings for this conversation, so the model can confirm or retract them.
+2. Prior findings for this conversation (confirmed or pending), so the model can confirm or retract them, and the
+   model's previous whole-chat reading, so its interpretation of earlier messages stays consistent.
 3. Evidence from the child's other conversations (cross-chat memory), most recent first.
 
 Message ids are aliased (m01, m02, ...) for small-model reliability and mapped back after validation.
@@ -11,6 +12,7 @@ Message ids are aliased (m01, m02, ...) for small-model reliability and mapped b
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Optional
 
 from .contract import Conversation, EvidenceEvent, Message, Participant
 
@@ -46,6 +48,7 @@ def build_context(
     conv_titles: dict[str, str],
     token_budget: int,
     related_limit: int,
+    previous_reading: Optional[str] = None,
 ) -> Context:
     focus = set(focus_ids)
     evidence_msgs = {e.message_id for e in conv_evidence if e.status in ("active", "needs_review")}
@@ -112,8 +115,9 @@ def build_context(
         ],
         "omitted_older_messages": omitted,
         "focus_message_ids": [id_to_alias[i] for i in focus_ids if i in id_to_alias],
+        "previous_reading": previous_reading,
         "prior_findings": [
-            {"message_id": id_to_alias[e.message_id], "cue": e.cue, "target_id": e.target_id, "modifier": e.modifier}
+            {"message_id": id_to_alias[e.message_id], "cue": e.cue, "target_id": e.target_id, "modifier": e.modifier, "status": "confirmed" if e.status == "active" else "pending"}
             for e in conv_evidence
             if e.status in ("active", "needs_review") and e.message_id in id_to_alias
         ],

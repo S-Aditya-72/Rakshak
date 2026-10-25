@@ -90,8 +90,10 @@ def empty(assessment: str = "harmless") -> dict:
     return {"conversation_reading": "test reading", "assessment": assessment, "categories": [], "target_participant_id": None, "findings": [], "retractions": [], "patterns": [], "explanation": "", "uncertain_reason": None}
 
 
-def finding(alias: str, cue: str, target: Optional[str] = "p-meera", modifier: str = "none", confidence: str = "high") -> dict:
-    return {"message_id": alias, "context_basis": "test basis", "cue": cue, "target_id": target, "modifier": modifier, "confidence": confidence, "rationale": "test"}
+def finding(alias: str, cue: str, target: Optional[str] = "p-meera", modifier: str = "none", confidence: str = "high", subject: Optional[str] = None) -> dict:
+    if subject is None:
+        subject = "child" if cue in ("image_request", "meeting_request", "personal_info_request") else "not_applicable"
+    return {"message_id": alias, "context_basis": "test basis", "requested_subject": subject, "cue": cue, "target_id": target, "modifier": modifier, "confidence": confidence, "rationale": "test"}
 
 
 def alias_of(ctx: Context, text_part: str) -> str:
@@ -102,12 +104,16 @@ def alias_of(ctx: Context, text_part: str) -> str:
     raise KeyError(text_part)
 
 
+LOCAL = ("127.0.0.1", 50000)  # the server laptop itself
+PHONE = ("192.168.1.42", 50000)  # a phone on the same Wi-Fi
+
+
 @pytest.fixture
 def make_client(tmp_path: Path):
-    def _make(qwen=None, chatgpt=None, roberta=None):
-        s = Settings(data_dir=tmp_path, chatgpt_enabled=True)
+    def _make(qwen=None, chatgpt=None, roberta=None, client=LOCAL, **settings):
+        s = Settings(data_dir=tmp_path, chatgpt_enabled=True, **settings)
         app = create_app(s, roberta=roberta or FakeRoberta(), qwen=qwen or FakeContextual("qwen"), chatgpt=chatgpt or FakeContextual("chatgpt"), load_models=False)
-        return TestClient(app)
+        return TestClient(app, client=client)
 
     return _make
 

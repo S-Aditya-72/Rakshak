@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Launch background for Android < 12: the app's dark background with the shield. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@color/rakshak_bg" />
+    <item
+        android:width="96dp"
+        android:height="96dp"
+        android:drawable="@drawable/rakshak_icon_round"
+        android:gravity="center" />
+</layer-list>

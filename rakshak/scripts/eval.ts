@@ -27,7 +27,7 @@ interface Expect {
   nonOffenders: string[];
   mustNotAlert: boolean;
   conversationsWithEvidence?: string[];
-  /** Cues that must appear in clean (unmodified, active/needs-review) evidence from a non-child sender. */
+  /** Cues that must appear in clean (unmodified, confirmed/active) evidence from a non-child sender. */
   requiredCues?: string[];
   notes?: string;
 }
@@ -110,7 +110,9 @@ function score(sc: ScenarioFile, out: Awaited<ReturnType<typeof runCase>>) {
   const offenders = new Set(tracks.flatMap((t) => (t.kind === 'bullying' ? t.senders : t.contactId && t.cues.length ? [t.contactId] : [])));
   const categories = [...new Set(tracks.filter((t) => t.level >= 1).map((t) => t.kind))];
   const msgIds = new Set(out.ids);
-  const scored = out.evidence.filter((x) => x.status === 'active' || x.status === 'needs_review');
+  // Only confirmed evidence counts; pending (needs_review) evidence takes no step and is reported separately.
+  const scored = out.evidence.filter((x) => x.status === 'active');
+  const pending = out.evidence.filter((x) => x.status === 'needs_review');
   const invalidRefs = out.evidence.filter((x) => !msgIds.has(x.messageId)).length;
   const dominant = risk?.tracks[0];
   const targetOk = e.target === null ? !dominant || dominant.level === 0 : scored.filter((x) => x.senderId !== sc.child.id).some((x) => x.targetId === e.target);
@@ -138,7 +140,7 @@ function score(sc: ScenarioFile, out: Awaited<ReturnType<typeof runCase>>) {
     conversationsOk: e.conversationsWithEvidence ? e.conversationsWithEvidence.every((c) => scored.some((x) => x.conversationId === c && x.senderId !== sc.child.id)) : null,
     evidence: scored.length,
     invalidEvidenceRefs: invalidRefs,
-    disagreements: scored.filter((x) => x.agreement === 'needs_review').length,
+    disagreements: pending.length,
     contextOverrides: out.runs.flatMap((r) => r.fusion).filter((f) => f.agreement === 'context_override').length,
     verifierRejections: out.runs.flatMap((r) => r.warnings).filter((w) => w.startsWith('verifier rejected')).length,
     validationWarnings: out.runs.flatMap((r) => r.warnings).filter((w) => !w.startsWith('verifier') && !w.startsWith('context:')).length,
@@ -215,7 +217,7 @@ function toMarkdown(report: any): string {
   for (const [backend, rows] of Object.entries<any[]>(report.results)) {
     const ok = rows.filter((r) => r.levelOk && r.requiredCuesOk !== false).length;
     lines.push(`## ${backend}`, '', `Cases passing (level in range and required cues found): **${ok}/${rows.length}**.` + ` Offender attribution errors: ${rows.reduce((n, r) => n + r.falsePositiveOffenders.length, 0)} wrongly counted, ${rows.reduce((n, r) => n + r.missedOffenders.length, 0)} missed.` + ` Invalid evidence references: ${rows.reduce((n, r) => n + r.invalidEvidenceRefs, 0)}.`, '', `Level within expected range: **${rows.filter((r) => r.levelOk).length}/${rows.length}**. False positives: ${rows.filter((r) => r.falsePositive).length}. False negatives: ${rows.filter((r) => r.falseNegative).length}.`, '');
-    lines.push('| Case | Level (expected) | Score | OK | Target | Required cues | Offenders found | Wrongly counted | Missed | Evidence | Invalid refs | Disagreements | Verifier rejections | p50 / p95 latency |');
+    lines.push('| Case | Level (expected) | Score | OK | Target | Required cues | Offenders found | Wrongly counted | Missed | Evidence | Invalid refs | Pending (unconfirmed) | Verifier rejections | p50 / p95 latency |');
     lines.push('|---|---|---|---|---|---|---|---|---|---|---|---|---|---|');
     for (const r of rows) {
       lines.push(

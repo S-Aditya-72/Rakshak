@@ -25,7 +25,7 @@ export const EvidenceEventSchema = z.object({
   modifier: z.enum(MODIFIERS),
   status: evStatus,
   agreement,
-  sources: z.array(z.enum(['roberta', 'qwen', 'chatgpt'])),
+  sources: z.array(z.enum(['roberta', 'qwen', 'chatgpt', 'rules'])),
   rationale: z.string(),
   runId: z.string(),
 });
@@ -52,6 +52,7 @@ export const AnalysisResultSchema = z.object({
       confidence: z.enum(CONFIDENCES),
       rationale: z.string(),
       contextBasis: z.string().nullable().optional(),
+      requestedSubject: z.string().nullable().optional(),
       verification: z.string().nullable().optional(),
     }),
   ),

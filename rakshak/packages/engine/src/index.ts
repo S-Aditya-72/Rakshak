@@ -171,6 +171,12 @@ function scoreTrack(key: string, kind: CueCategory, contactId: string | null, ev
       trace.push(`${ev.cue}  p=${fmtP(ev.p)}  below threshold`);
       continue;
     }
+    // Pending (unconfirmed) evidence is recorded and shown, but takes no step: no score, no stage, no floor,
+    // no attribution. It counts only once the analysis confirms it (status "active").
+    if (ev.status === 'needs_review') {
+      trace.push(`${ev.cue}  p=${fmtP(ev.p)}  pending confirmation · not scored`);
+      continue;
+    }
     advance(ev.day);
 
     let factor = 1;
@@ -185,10 +191,6 @@ function scoreTrack(key: string, kind: CueCategory, contactId: string | null, ev
       } else {
         notes.push('banter reading ignored for this cue');
       }
-    }
-    if (ev.status === 'needs_review') {
-      factor *= cfg.reductions.needsReview;
-      notes.push(`×${cfg.reductions.needsReview} model disagreement`);
     }
     if (kind === 'grooming' && primed && cfg.grooming.sequenceRequests.includes(ev.cue)) {
       factor *= cfg.grooming.sequenceMultiplier;
@@ -410,7 +412,7 @@ export function guardianSummary(t: TrackState, childName: string, contactLabel: 
   if (t.level === 3)
     return {
       title: t.stage === 'coercion' ? 'Threat / coercion detected' : 'Critical safeguarding concern',
-      body: `Potential grooming pattern from ${who}: ${n} cues over ${days} (${kinds}). Model-detected, needs your review. A guided report is ready.`,
+      body: `Potential grooming pattern from ${who}: ${n} cues over ${days} (${kinds}). Model-detected, needs your review. Get help walks you through the next steps.`,
     };
   return {
     title: 'Potential grooming pattern',

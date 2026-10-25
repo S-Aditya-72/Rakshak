@@ -1,6 +1,6 @@
 // Demo state, the scenario player and the live analysis loop.
-// Every change is an Action run through `reduce`, and actions are mirrored to other tabs over BroadcastChannel,
-// so /predator, /victim and /console can live in separate windows and stay in sync.
+// Every change is an Action run through `reduce`, and actions are mirrored to other tabs (BroadcastChannel) and other
+// devices (the server's sync relay), so pop-out windows and phones stay in sync. See lib/sync.ts.
 // Async work (server calls, model runs) happens only in the tab that started it; its results arrive as actions.
 //
 // Modes vs cases: `mode` is only what the presenter is looking at (A Guided Demo, B Continue the Conversation,
@@ -11,12 +11,14 @@
 import type { RiskState } from '@rakshak/engine';
 import type { AnalysisResult, EvidenceEvent } from '@rakshak/shared';
 import { create } from 'zustand';
-import { BACKEND_META, CHILD, CUE_ACTIVE_P, WEEKDAYS } from './data/meta';
+import { BACKEND_META, CHILD, CUE_ACTIVE_P, GUARDIAN, WEEKDAYS } from './data/meta';
 import { PREVIEW_BY_LEVEL, SCENARIO as PREVIEW_SCRIPT } from './data/scenario';
 import { api, ApiError, rid, type ChatGPTStatus, type Checkpoint, type Health, type ScenarioView, type ServerState } from './lib/api';
-import { alertsToFire, analysisFor, nameMap, riskOf, type CaseInputs } from './lib/case';
+import { alertsToFire, alertsToWithdraw, analysisFor, nameMap, riskOf, WITHDRAW_REASON, type CaseInputs } from './lib/case';
+import { activeAudience, isGuardianDevice, type Audience } from './lib/device';
 import { autoAnalyses, canCompose, caseKeyOf, HISTORY_IDLE, historyChunks, historyStatusOf, parsePrefs, unanalysedTails, type HistoryInit, type Prefs } from './lib/flow';
-import type { AlertItem, Analysis, Backend, ChatMessage, ConversationView, Level, Mode, Origin, ParticipantView, Side, Stage } from './types';
+import { createBus } from './lib/sync';
+import type { AlertItem, Analysis, Backend, CaseResponse, ChatMessage, ConversationView, Level, Mode, Notice, Origin, ParticipantView, ResponseKind, Side, Stage } from './types';
 
 /** Id of the offline presentation preview (precomputed analyses, clearly labelled, never presented as live AI). */
 export const PREVIEW_ID = 'preview-scripted';
@@ -33,6 +35,10 @@ export interface DemoData {
   simDay: number;
   messages: ChatMessage[];
   typing: Record<Side, boolean>;
+  /** Scripted playback: the text being typed on that side's keyboard. */
+  drafts: Record<Side, string>;
+  /** Read receipts: `${conversationId}:${side}` → last message that side's phone has seen. */
+  reads: Record<string, { upto: string; time: string }>;
   analyzingId: string | null;
   score: number;
   level: Level;
@@ -45,6 +51,12 @@ export interface DemoData {
   guardianSheet: AlertItem | null;
   critical: AlertItem | null;
   reportOpen: boolean;
+  /** What the child and guardian did about the alerts (button presses), newest last. */
+  responses: CaseResponse[];
+  /** Help request / SOS from the child, shown on the guardian's phone. */
+  guardianNotice: Notice | null;
+  /** Check-in from the guardian, shown on the child's phone. */
+  childNotice: Notice | null;
   /** Alert whose "Get help" workflow is open (always tied to the alert's own case). */
   helpFor: AlertItem | null;
   helpTab: HelpTab;
@@ -92,7 +104,11 @@ export type Action =
   | { type: 'setPlaying'; playing: boolean }
   | { type: 'setCursor'; cursor: number }
   | { type: 'setDay'; day: number }
-  | { type: 'typing'; side: Side; on: boolean }
+  | { type: 'typing'; side: Side; on: boolean; draft?: string }
+  | { type: 'read'; conversationId: string; side: Side; upto: string; time: string }
+  | { type: 'block'; contactId: string; day: number; by?: 'child' | 'guardian'; time?: string }
+  /** Guardian devices: the alert summary chat devices publish for them (never message content). */
+  | { type: 'project'; state: Partial<DemoData> }
   | { type: 'push'; message: ChatMessage }
   | { type: 'analyzing'; id: string | null }
   | { type: 'analysis'; id: string; analysis: Analysis }
@@ -108,6 +124,8 @@ export type Action =
   | { type: 'openHelp'; alert: AlertItem; tab?: HelpTab }
   | { type: 'closeHelp' }
   | { type: 'snapshot'; data: DemoData }
+  | { type: 'respond'; response: CaseResponse; guardianNotice?: Notice; childNotice?: Notice; system?: ChatMessage }
+  | { type: 'clearNotice'; who: 'guardian' | 'child' }
   // real case memory
   | { type: 'hydrate'; state: Partial<DemoData> }
   | { type: 'historyInit'; patch: Partial<HistoryInit> }
@@ -115,7 +133,7 @@ export type Action =
   | { type: 'setPerspective'; id: string }
   | { type: 'addConversation'; conversation: ConversationView; participants: ParticipantView[] }
   | { type: 'pending'; ids: string[]; on: boolean }
-  | { type: 'runApplied'; run: AnalysisResult; analyses: Record<string, Analysis>; evidence: EvidenceEvent[]; firstSeen: Record<string, number>; risk: RiskState; point: { day: number; score: number; level: Level }; fire: AlertItem[]; alerted: Record<string, number>; historical: boolean }
+  | { type: 'runApplied'; run: AnalysisResult; analyses: Record<string, Analysis>; evidence: EvidenceEvent[]; firstSeen: Record<string, number>; risk: RiskState; point: { day: number; score: number; level: Level }; fire: AlertItem[]; alerted: Record<string, number>; historical: boolean; withdrawn?: string[] }
   | { type: 'runError'; error: { code: string; message: string } | null; clear?: string[] }
   | { type: 'setRisk'; risk: RiskState; dismissalList?: DemoData['dismissalList']; blocks?: DemoData['blocks'] }
   | { type: 'env'; patch: Partial<Pick<DemoData, 'health' | 'serverOnline' | 'scenarios' | 'caption'>> }
@@ -158,6 +176,8 @@ function initial(keep?: Partial<DemoData>): DemoData {
     simDay: 1,
     messages: [],
     typing: { predator: false, victim: false },
+    drafts: { predator: '', victim: '' },
+    reads: {},
     analyzingId: null,
     score: 0,
     level: 0,
@@ -170,6 +190,9 @@ function initial(keep?: Partial<DemoData>): DemoData {
     guardianSheet: null,
     critical: null,
     reportOpen: false,
+    responses: [],
+    guardianNotice: null,
+    childNotice: null,
     helpFor: null,
     helpTab: 'understand',
     origin: null,
@@ -228,6 +251,7 @@ function buildPreviewAlert(id: string, a: Analysis, day: number, time: string, m
     cues,
     preview,
     category: 'grooming',
+    contactId: 'p-kabir',
     caseKey: 'preview',
     childName: CHILD.name,
   };
@@ -277,7 +301,27 @@ export function reduce(s: DemoData, a: Action): DemoData {
       return { ...s, simDay: a.day, risk, score: risk.score, level: risk.level, stage: risk.stage };
     }
     case 'typing':
-      return { ...s, typing: { ...s.typing, [a.side]: a.on } };
+      return { ...s, typing: { ...s.typing, [a.side]: a.on }, drafts: { ...s.drafts, [a.side]: a.on ? a.draft ?? '' : '' } };
+    case 'read':
+      return { ...s, reads: { ...s.reads, [`${a.conversationId}:${a.side}`]: { upto: a.upto, time: a.time } } };
+    case 'block': {
+      if (s.blocks.some((b) => b.contactId === a.contactId)) return s;
+      const blocks = [...s.blocks, { contactId: a.contactId, day: a.day }];
+      // The note in the chat is added by every device that holds the chat (a guardian's phone presses Block without one).
+      const conv = s.conversations.find((c) => c.kind === 'private' && c.participantIds.includes(a.contactId));
+      const name = s.participants.find((p) => p.id === a.contactId)?.displayName ?? 'this contact';
+      const noteId = `sys-block-${a.contactId}`;
+      const messages =
+        conv && a.by && !s.messages.some((m) => m.id === noteId)
+          ? [...s.messages, { id: noteId, kind: 'system' as const, conversationId: conv.id, text: a.by === 'child' ? `You blocked ${name}` : `${GUARDIAN.name} blocked ${name} through RAKSHAK`, day: a.day, time: a.time ?? '' }]
+          : s.messages;
+      // Devices that hold the evidence re-score with the block (computeRisk is pure); guardian devices only note it.
+      if (!s.risk || s.evidence.length === 0) return { ...s, blocks, messages };
+      const risk = riskOf(caseInputs({ ...s, blocks }));
+      return { ...s, blocks, messages, risk, score: risk.score, level: risk.level, stage: risk.stage };
+    }
+    case 'project':
+      return { ...s, ...a.state };
     case 'push':
       if (s.messages.some((m) => m.id === a.message.id)) return s;
       return { ...s, messages: a.message.kind === 'msg' && a.message.conversationId ? withDayRow(s.messages, a.message) : [...s.messages, a.message] };
@@ -333,6 +377,16 @@ export function reduce(s: DemoData, a: Action): DemoData {
       return { ...s, helpFor: null };
     case 'snapshot':
       return a.data;
+    case 'respond': {
+      let next: DemoData = { ...s, responses: [...s.responses, a.response] };
+      if (a.guardianNotice) next.guardianNotice = a.guardianNotice;
+      if (a.childNotice) next.childNotice = a.childNotice;
+      if (a.system && !s.messages.some((m) => m.id === a.system!.id)) next.messages = [...s.messages, a.system];
+      if (a.response.kind === 'report_done') next = { ...next, critical: null, reportOpen: false };
+      return next;
+    }
+    case 'clearNotice':
+      return a.who === 'guardian' ? { ...s, guardianNotice: null } : { ...s, childNotice: null };
 
     case 'hydrate':
       return { ...s, ...a.state };
@@ -376,6 +430,19 @@ export function reduce(s: DemoData, a: Action): DemoData {
         lastRun: a.run,
         runError: a.run.error && a.run.error.code !== 'stale' ? a.run.error : null,
       };
+      if (a.withdrawn?.length) {
+        // Retracted on a fuller reading: keep the alert in the guardian's history, marked withdrawn, and take it off screen.
+        const gone = new Set(a.withdrawn);
+        const off = (x: AlertItem | null) => (x && gone.has(x.id) ? null : x);
+        next = {
+          ...next,
+          alerts: next.alerts.map((al) => (gone.has(al.id) ? { ...al, withdrawn: true, withdrawnReason: WITHDRAW_REASON } : al)),
+          victimNudge: off(next.victimNudge),
+          guardianBanner: off(next.guardianBanner),
+          guardianSheet: off(next.guardianSheet),
+          critical: off(next.critical),
+        };
+      }
       // Historical findings are recorded and listed, but not pushed as a storm of pop-ups.
       if (a.historical) next = { ...next, alerts: [...next.alerts, ...a.fire] };
       else for (const al of a.fire) next = route(next, al);
@@ -410,43 +477,128 @@ function defaultPerspective(s: DemoData, convId: string): string | null {
   return s.perspective && others.includes(s.perspective) ? s.perspective : others[0] ?? null;
 }
 
-// ---------- store + cross-tab sync ----------
-
-const tabId = Math.random().toString(36).slice(2);
-const channel = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel('rakshak-demo') : null;
+// ---------- store + cross-tab / cross-device sync ----------
 
 interface Store {
   data: DemoData;
   dispatch: (a: Action) => void;
 }
 
+/** Actions a guardian device may send. Its other actions (opening a sheet, closing a banner) stay on that phone. */
+const GUARDIAN_ACTIONS = new Set<Action['type']>(['respond', 'block', 'clearNotice']);
+
 export const useDemo = create<Store>((set) => ({
   data: initial(loadPrefs()),
   dispatch: (a) => {
     set((st) => ({ data: reduce(st.data, a) }));
     if (a.type === 'setMode' || a.type === 'setBackend' || a.type === 'setSound' || a.type === 'setSpeed') savePrefs(useDemo.getState().data);
-    channel?.postMessage({ v: SYNC_VERSION, from: tabId, action: a });
+    if (a.type === 'project') return;
+    if (!isGuardianDevice()) bus.post({ action: a }, ['chat']);
+    else if (GUARDIAN_ACTIONS.has(a.type)) bus.post({ action: a }, ['chat']);
+    scheduleProjection();
   },
 }));
 
-/** Bumped whenever DemoData changes shape: tabs running an older build are ignored instead of crashing this one. */
-const SYNC_VERSION = 2;
-type Wire = { v?: number; from: string; action?: Action; hello?: boolean; snapshot?: DemoData };
+type Wire = { from: string; action?: Action; hello?: boolean; aud?: Audience; snapshot?: DemoData; projection?: Partial<DemoData> };
 
-if (channel) {
-  channel.onmessage = (e: MessageEvent<Wire>) => {
-    const msg = e.data;
-    if (msg.from === tabId || msg.v !== SYNC_VERSION) return;
+/** Phones only mirror the laptop, so after a dropped connection they take its snapshot even if they hold old data. */
+let viewer = false;
+let awaitingSnapshot = false;
+
+export function setViewer(on: boolean) {
+  viewer = on;
+}
+
+const bus = createBus(
+  (msg: Wire) => {
+    const guardian = isGuardianDevice();
     if (msg.hello) {
+      if (guardian) return; // guardian devices hold no case to share
+      if (msg.aud && msg.aud !== 'chat') return publishProjection(msg.aud, true);
       const data = useDemo.getState().data;
-      if (data.messages.length || data.alerts.length || data.conversations.length) channel.postMessage({ v: SYNC_VERSION, from: tabId, snapshot: data });
+      if (data.messages.length || data.alerts.length || data.conversations.length) bus.post({ snapshot: data }, ['chat']);
+    } else if (msg.projection) {
+      if (guardian) useDemo.setState((st) => ({ data: reduce(st.data, { type: 'project', state: msg.projection! }) }));
     } else if (msg.snapshot) {
-      if (useDemo.getState().data.messages.length === 0) useDemo.setState({ data: { ...initial(), ...msg.snapshot } });
+      if (guardian) return;
+      if (useDemo.getState().data.messages.length === 0 || (viewer && awaitingSnapshot)) useDemo.setState({ data: { ...initial(), ...msg.snapshot } });
+      awaitingSnapshot = false;
+      scheduleProjection();
     } else if (msg.action) {
       useDemo.setState((st) => ({ data: reduce(st.data, msg.action!) }));
+      scheduleProjection();
     }
+  },
+  () => {
+    awaitingSnapshot = true;
+    sayHello();
+  },
+);
+
+function sayHello() {
+  bus.post({ hello: true, aud: activeAudience() }, ['chat']);
+}
+sayHello();
+
+/** A device's role changed (a role screen opened): start clean, then ask the chat devices for what this role may see. */
+export function resetForRole() {
+  useDemo.setState((st) => ({ data: initial({ ...KEEP(st.data), scenarios: [] }) })); // scenarios carry script text
+  lastProjection.guardian = lastProjection.critical = '';
+  sayHello();
+}
+
+// ---------- what guardian devices receive ----------
+// Chat devices publish a summary for the guardians whenever it changes: alerts at the guardian's level, the risk
+// track behind them, responses and notices. Never messages, drafts, evidence or model output (the relay checks).
+
+const lastProjection: Record<'guardian' | 'critical', string> = { guardian: '', critical: '' };
+let projectionTimer: ReturnType<typeof setTimeout> | undefined;
+
+function scheduleProjection() {
+  if (isGuardianDevice()) return;
+  clearTimeout(projectionTimer);
+  projectionTimer = setTimeout(() => {
+    publishProjection('guardian');
+    publishProjection('critical');
+  }, 120);
+}
+
+function publishProjection(aud: Audience, force = false) {
+  if (aud === 'chat' || isGuardianDevice()) return;
+  const state = projectFor(useDemo.getState().data, aud);
+  const json = JSON.stringify(state);
+  if (!force && json === lastProjection[aud]) return;
+  lastProjection[aud] = json;
+  bus.post({ projection: state }, [aud]);
+}
+
+/** The guardian's view of the case. "critical": a temporary guardian who only gets Level 3. */
+export function projectFor(d: DemoData, aud: 'guardian' | 'critical'): Partial<DemoData> {
+  const min = aud === 'critical' ? 3 : 2; // Level 1 nudges stay private to the child
+  const alerts = d.alerts.filter((a) => a.level >= min);
+  const visible = alerts.length > 0;
+  return {
+    mode: d.mode,
+    sound: d.sound,
+    scenarioId: d.scenarioId,
+    origin: d.origin,
+    generation: d.generation,
+    childId: d.childId,
+    simDay: d.simDay,
+    participants: d.participants,
+    alerts,
+    score: visible ? d.score : 0,
+    level: visible ? d.level : 0,
+    stage: visible ? d.stage : 'rapport',
+    history: visible ? d.history : [],
+    risk: visible && d.risk ? { ...d.risk, tracks: d.risk.tracks.filter((t) => t.level >= min) } : null,
+    dismissals: d.dismissals,
+    guardianBanner: d.guardianBanner && d.guardianBanner.level >= min ? d.guardianBanner : null,
+    critical: d.critical,
+    guardianNotice: aud === 'critical' && d.guardianNotice?.tone !== 'urgent' ? null : d.guardianNotice,
+    responses: d.responses,
+    blocks: d.blocks,
   };
-  channel.postMessage({ v: SYNC_VERSION, from: tabId, hello: true });
 }
 
 // ---------- helpers ----------
@@ -465,7 +617,7 @@ let initToken = 0;
 let historyLoadKey: string | null = null;
 
 const wait = (ms: number) => new Promise<void>((r) => setTimeout(r, ms / get().speed));
-const typingMs = (text: string) => Math.min(2200, Math.max(700, 450 + text.length * 26));
+export const typingMs = (text: string) => Math.min(2200, Math.max(700, 450 + text.length * 26));
 const nowTime = () => new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 
 function caseInputs(d: DemoData, patch: Partial<CaseInputs> = {}): CaseInputs {
@@ -557,6 +709,11 @@ function applyServerState(st: ServerState) {
       analysis: run ? analysisFor(m.id, run, evidence, risk, backend) : undefined,
     });
   }
+  // Notes ("Amma blocked Kabir"), undelivered messages and photos live only on the devices, not on the server: keep them.
+  const local = new Map(d.messages.map((m) => [m.id, m]));
+  messages = messages.map((m) => (local.get(m.id)?.image ? { ...m, image: local.get(m.id)!.image } : m));
+  const known = new Set(messages.map((m) => m.id));
+  messages = [...messages, ...d.messages.filter((m) => (m.kind === 'system' || m.undelivered) && !known.has(m.id))];
   const lastMsg = st.messages[st.messages.length - 1];
   const activeConv = d.activeConv && conversations.some((c) => c.id === d.activeConv) ? d.activeConv : lastMsg?.conversationId ?? conversations[0]?.id ?? null;
   const alerts: AlertItem[] = st.alerts.map((a) => {
@@ -574,10 +731,13 @@ function applyServerState(st: ServerState) {
       cues: (track?.cues ?? []).map((c) => ({ cue: c.cue, day: c.day })),
       category: a.trackKey === 'bullying' ? 'bullying' : 'grooming',
       trackKey: a.trackKey,
+      contactId: track?.contactId ?? undefined,
       caseKey,
       childName,
       historical: !!a.historical,
       evidenceKeys: (track?.cues ?? []).map((c) => c.evidenceKey),
+      withdrawn: !!a.withdrawn,
+      withdrawnReason: a.withdrawn ? a.withdrawnReason ?? WITHDRAW_REASON : undefined,
     };
   });
   const scenarioId = meta.scenarioId ?? st.scenarioId ?? null;
@@ -659,12 +819,17 @@ function applyRun(run: AnalysisResult, evidence: EvidenceEvent[], firstSeen: Rec
   const names = nameMap(d.participants);
   const childName = childNameOf(d);
   const caseKey = caseKeyFor(d);
-  const { items, next } = alertsToFire(risk, d.alerted, { day, time: lastFocus?.time ?? nowTime(), childName, names, runId: run.analysisId });
+  // Alerts whose evidence was retracted are withdrawn first, which re-arms their track for new confirmed evidence.
+  const withdrawn = historical ? [] : alertsToWithdraw(d.alerts, evidence, risk);
+  const alertedBase = { ...d.alerted };
+  for (const w of withdrawn) if (w.trackKey) delete alertedBase[w.trackKey];
+  const { items, next } = alertsToFire(risk, alertedBase, { day, time: lastFocus?.time ?? nowTime(), childName, names, runId: run.analysisId });
   const fire = items.map((a) => ({ ...a, caseKey, childName, historical, evidenceKeys: risk.tracks.find((t) => t.key === a.trackKey)?.cues.map((c) => c.evidenceKey) ?? [] }));
-  dispatch({ type: 'runApplied', run, analyses, evidence, firstSeen, risk, point: { day, score: risk.score, level: risk.level }, fire, alerted: next, historical });
+  dispatch({ type: 'runApplied', run, analyses, evidence, firstSeen, risk, point: { day, score: risk.score, level: risk.level }, fire, alerted: next, historical, withdrawn: withdrawn.map((w) => w.id) });
   // Persist the deterministic outputs next to the evidence (fire-and-forget; the server de-duplicates alerts).
   const b = apiBackend(d.backend);
   api.snapshot(d.childId, { backend: b, runId: run.analysisId, day, score: risk.score, level: risk.level, stage: risk.stage, category: risk.category, dominantTrack: risk.dominantTrack, trace: risk.trace, evidenceKeys: evidence.filter((e) => e.status === 'active' || e.status === 'needs_review').map((e) => e.key) }).catch(() => {});
+  for (const w of withdrawn) api.withdrawAlert(d.childId, w.id, { backend: b, reason: WITHDRAW_REASON }).catch(() => {});
   for (const a of fire) api.alert(d.childId, { id: a.id, backend: b, trackKey: a.trackKey, level: a.level, day: a.day, time: a.time, title: a.guardianTitle, body: a.guardianBody, historical }).catch(() => {});
 }
 
@@ -691,22 +856,81 @@ export async function dismissNudge() {
   api.dismissal(d.childId, { day: d.simDay, trackKey }).catch(() => {});
 }
 
-/** Child tapped "Block" in a nudge: recorded so a brand-new contact right after it is flagged for review. Simulator-only. */
+// ---------- responses to alerts (the buttons on the alerts) ----------
+
+function responseLabel(kind: ResponseKind, child: string): string {
+  return {
+    child_help: `${child} asked to talk to ${GUARDIAN.name}`,
+    child_sos: `${child} sent an SOS to ${GUARDIAN.name}`,
+    child_block: `${child} blocked the contact`,
+    child_photo_held: `${child} chose not to send a photo after RAKSHAK's warning`,
+    child_photo_sent: `${child} sent a photo after RAKSHAK's warning`,
+    guardian_talk: `${GUARDIAN.name} sent ${child} a check-in`,
+    guardian_block: `${GUARDIAN.name} blocked the contact`,
+    guardian_counsellor: 'School counsellor notified (cue types and dates only)',
+    guardian_trusted: 'Trusted adult alerted',
+    guardian_call: `${GUARDIAN.name} opened the dialer for 1930`,
+    report_done: 'Guided report completed',
+  }[kind];
+}
+
+/** Record a button press and deliver its effect to the other phones (the action is mirrored like any other). */
+export function respond(kind: ResponseKind, alertId?: string, extra: { guardianNotice?: Notice; childNotice?: Notice; system?: ChatMessage } = {}) {
+  const d = get();
+  const child = childNameOf(d);
+  const response: CaseResponse = { id: `r-${uid()}`, kind, by: kind.startsWith('child') ? 'child' : 'guardian', label: responseLabel(kind, child), day: d.simDay, time: nowTime(), alertId };
+  const notice = (tone: Notice['tone'], title: string, body: string): Notice => ({ id: `n-${uid()}`, tone, title, body, time: response.time });
+  const auto =
+    kind === 'child_help'
+      ? { guardianNotice: notice('calm', `${child} would like to talk`, `Sent from RAKSHAK on ${child}'s phone. None of their messages are shared.`) }
+      : kind === 'child_sos'
+        ? { guardianNotice: notice('urgent', `${child} needs you now`, `SOS from RAKSHAK on ${child}'s phone. Call them or go to them.`) }
+        : kind === 'child_photo_sent'
+          ? { guardianNotice: notice('warn', `${child} sent a photo`, `A photo was sent in a chat RAKSHAK flagged, after a warning. The photo itself is not shared with you.`) }
+          : kind === 'guardian_talk'
+            ? { childNotice: notice('calm', GUARDIAN.name, `Hey ${child}, can we talk this evening? You're not in trouble. 💛`) }
+            : {};
+  dispatch({ type: 'respond', response, ...auto, ...extra });
+}
+
+/** The child answered the guardian's check-in. */
+export function replyToGuardian(text: string) {
+  const time = nowTime();
+  const child = childNameOf(get());
+  dispatch({ type: 'clearNotice', who: 'child' });
+  dispatch({
+    type: 'respond',
+    response: { id: `r-${uid()}`, kind: 'child_help', by: 'child', label: `${child} replied: ${text}`, day: get().simDay, time },
+    guardianNotice: { id: `n-${uid()}`, tone: 'calm', title: `${child} replied`, body: text, time },
+  });
+}
+
+export function isBlocked(contactId: string | null | undefined): boolean {
+  return !!contactId && get().blocks.some((b) => b.contactId === contactId);
+}
+
+/**
+ * Block a contact, from the child's nudge or the guardian's alert. The engine records it (a brand-new contact right
+ * after a block is flagged for review), the chat shows a note, and in live chat the contact's messages stop arriving.
+ */
+export function blockContact(contactId: string | undefined, by: 'child' | 'guardian', alertId?: string) {
+  const d = get();
+  if (!contactId || isBlocked(contactId)) return;
+  respond(by === 'child' ? 'child_block' : 'guardian_block', alertId);
+  dispatch({ type: 'block', contactId, day: d.simDay, by, time: nowTime() });
+  if (d.scenarioId !== PREVIEW_ID) api.block(d.childId, { contactId, day: d.simDay }).catch(() => {}); // the preview has no server case
+}
+
+/** Child tapped "Block" in a nudge: blocks the contact of the open private chat. */
 export function blockActiveContact() {
   const d = get();
   const conv = d.conversations.find((c) => c.id === d.activeConv);
-  const contactId = conv?.kind === 'private' ? conv.participantIds.find((p) => p !== d.childId) : undefined;
-  if (!contactId) return;
-  recordBlock(contactId);
+  blockContact(conv?.kind === 'private' ? conv.participantIds.find((p) => p !== d.childId) : undefined, 'child', d.victimNudge?.id);
 }
 
-/** Records a simulated block of one contact in this case (no real platform account is affected). */
-export function recordBlock(contactId: string) {
-  const d = get();
-  if (d.blocks.some((b) => b.contactId === contactId)) return;
-  const blocks = [...d.blocks, { contactId, day: d.simDay }];
-  recomputeRisk({ blocks });
-  api.block(d.childId, { contactId, day: d.simDay }).catch(() => {});
+/** Block from the guardian's Get help panel: the same block as the alert's button, shared with every phone. */
+export function recordBlock(contactId: string, alertId?: string) {
+  blockContact(contactId, 'guardian', alertId);
 }
 
 // ---------- messages ----------
@@ -724,20 +948,42 @@ async function postMessage(m: ChatMessage) {
 }
 
 /** Modes B and C: a person typed a message on one of the phones. */
-export async function sendLive(side: Side, text: string) {
+export async function sendLive(side: Side, text: string, conversationId?: string, image?: string) {
   const d = get();
   if (!canCompose(d.mode, d.origin, d.historyInit)) return;
-  const convId = d.activeConv;
+  const convId = conversationId ?? d.activeConv;
   if (!convId) return;
   const senderId = side === 'victim' ? d.childId : d.perspective;
   if (!senderId) return;
-  const m: ChatMessage = { id: `m-${uid()}${uid()}`, kind: 'msg', from: side, conversationId: convId, senderId, text, day: d.simDay, time: nowTime() };
+  const m: ChatMessage = { id: `m-${uid()}${uid()}`, kind: 'msg', from: side, conversationId: convId, senderId, text, day: d.simDay, time: nowTime(), ...(image ? { image } : {}) };
+  dispatch({ type: 'typing', side, on: false });
+  const conv = d.conversations.find((c) => c.id === convId);
+  if (side === 'predator' && conv?.kind === 'private' && isBlocked(senderId)) {
+    // Blocked: the contact sees "Not delivered"; the child never receives it and nothing is analysed.
+    dispatch({ type: 'push', message: { ...m, undelivered: true } });
+    return;
+  }
   dispatch({ type: 'push', message: m });
   const ok = await postMessage(m);
   // Every saved message is eligible for local contextual reassessment, including the child's own objections and
   // clarifications (the engine never scores the child's own messages against the child). Rapid messages are
   // coalesced by the server into one run that covers all of them. ChatGPT never runs from typing: owner button only.
   if (ok && autoAnalyses(d.backend)) void analyzeConversation(convId, m.id, 'auto');
+}
+
+/** A phone's keyboard: "typing…" on the other phone while someone types (live chat). */
+let typingOff: ReturnType<typeof setTimeout> | undefined;
+export function typingLive(side: Side) {
+  if (!get().typing[side]) dispatch({ type: 'typing', side, on: true });
+  clearTimeout(typingOff);
+  typingOff = setTimeout(() => dispatch({ type: 'typing', side, on: false }), 2500);
+}
+
+/** A phone has this chat open and on screen: the other side's messages up to `upto` are read. */
+export function markRead(conversationId: string, side: Side, upto: string) {
+  const r = get().reads[`${conversationId}:${side}`];
+  if (r?.upto === upto) return;
+  dispatch({ type: 'read', conversationId, side, upto, time: nowTime() });
 }
 
 /** Owner-initiated ChatGPT analysis of the open conversation (Sign in with ChatGPT terms: no background use). */
@@ -850,7 +1096,7 @@ export async function initHistory() {
     dispatch({ type: 'historyInit', patch: { done } });
   }
   const after = get();
-  const baseline = { level: after.level, score: after.score, findings: after.evidence.filter((e) => e.status === 'active' || e.status === 'needs_review').length };
+  const baseline = { level: after.level, score: after.score, findings: after.evidence.filter((e) => e.status === 'active').length };
   dispatch({ type: 'historyInit', patch: { status: 'complete', done, total, error: null, baseline } });
 }
 
@@ -980,7 +1226,7 @@ async function runStep(i: number, token: number): Promise<boolean> {
   }
 
   const side = sideOf(step.senderId);
-  dispatch({ type: 'typing', side, on: true });
+  dispatch({ type: 'typing', side, on: true, draft: step.text });
   await wait(typingMs(step.text));
   if (token !== runToken) return false;
   dispatch({ type: 'typing', side, on: false });

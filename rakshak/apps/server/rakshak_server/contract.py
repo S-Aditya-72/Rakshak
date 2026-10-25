@@ -46,6 +46,9 @@ PATTERN_TYPES = (
 )
 # Categorical model confidence -> evidence strength. Models are never asked for numeric scores.
 CONFIDENCE_P = {"low": 0.4, "medium": 0.7, "high": 0.9}
+# Request cues are harmful only when what is requested is the child (their photo, their company, their whereabouts).
+REQUEST_CUES = frozenset({"image_request", "meeting_request", "personal_info_request"})
+REQUEST_SUBJECTS = ("child", "everyday_thing", "unclear", "not_applicable")
 
 Backend = Literal["local_hybrid", "chatgpt_cloud"]
 
@@ -122,6 +125,8 @@ class ModelFinding(Camel):
     rationale: str
     # Which earlier messages shaped this reading (from the model), or "no earlier context".
     context_basis: Optional[str] = None
+    # Request cues only: what is being asked for, as the model resolved it from the conversation.
+    requested_subject: Optional[str] = None
     # Result of the verification pass: supported | unclear | corroborated (RoBERTa agrees) | known (already evidence) | None (not run)
     verification: Optional[str] = None
 
@@ -250,6 +255,11 @@ class AlertIn(Camel):
     body: str
     # Raised while an earlier conversation was being analysed (history preload): recorded, not pushed as a pop-up.
     historical: bool = False
+
+
+class AlertWithdrawIn(Camel):
+    backend: Backend
+    reason: str = Field(default="", max_length=300)
 
 
 class DismissalIn(Camel):

@@ -96,6 +96,9 @@ vi.mock('./lib/api', async () => {
   return {
     ApiError,
     rid: () => 'r',
+    // Server address for the cross-device sync (lib/sync.ts): none in tests, so only this tab's channel is used.
+    getServer: () => ({ url: '', token: '' }),
+    onServerChange: () => () => {},
     api: {
       health: async () => ({ server: { ok: true }, roberta: {}, qwen: {}, chatgpt: { status: 'disconnected' } }),
       scenarios: async () => [scenario],

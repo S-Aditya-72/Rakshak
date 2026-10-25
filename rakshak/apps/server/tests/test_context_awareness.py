@@ -65,8 +65,8 @@ def test_whole_chat_harmless_reading_overrides_out_of_context_flag(make_client):
     c = make_client(qwen=qwen, roberta=FakeRoberta({}))
     mid = homework_chat(c)
     out = analyze(c, "e6-c", mid).json()
-    ev = [e for e in out["evidence"] if e["cue"] == "image_request"][0]
-    assert ev["status"] == "needs_review" and "whole-chat assessment (harmless)" in out["result"]["fusion"][0]["note"]
+    assert out["evidence"] == []  # the harmless whole-chat reading wins: nothing is recorded, nothing is acted on
+    assert out["result"]["fusion"][0]["status"] == "suppressed"
     assert any("contradicts serious findings" in w for w in out["result"]["warnings"])
 
 

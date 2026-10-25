@@ -6,22 +6,39 @@ Rules (see README "Fusion"):
 - If RoBERTa flags a message that context explains as banter/quote/counterspeech or a harmless exchange,
   the RoBERTa signal is kept but suppressed (context_override) and does not score.
 - If RoBERTa flags a message and the contextual model is silent, that is an explicit disagreement:
-  needs_review evidence, which the engine counts at reduced weight and which cannot trigger floors.
+  needs_review (pending) evidence.
 - One evidence event per (backend, conversation, message, cue, target): both models feed the same row,
   so the same harm is never counted twice.
 - RoBERTa never produces grooming cues.
-- The whole-chat reading is authoritative: a finding the model's own conversation-level assessment contradicts
-  ("harmless", or "uncertain" without high confidence) is kept but goes to needs_review, for every cue. It cannot
-  trigger floors on its own, so one word read out of context never raises an alert.
+- CONFIRMATION GATE. Only confirmed evidence is "active"; everything else is "needs_review" (pending), which the
+  engine records but never scores, never uses for floors and never alerts on. A harmful reading is confirmed only if:
+    1. the model's whole-chat assessment is "concerning" or "harmful" (never "uncertain" or "harmless"),
+    2. the verification pass did not answer "unclear",
+    3. for request cues, the model resolved that what is requested is the child itself, and
+    4. it is high-confidence, or RoBERTa independently agrees, or it was flagged before and the model still holds it
+       after reading later messages (a second reading with more context).
+- A "harmless" whole-chat reading wins outright: a serious finding the model reports while calling the whole chat
+  harmless is dropped, not recorded.
 """
 
 from __future__ import annotations
 
 from typing import Optional
 
-from .contract import CONFIDENCE_P, CUE_CATEGORY, Conversation, EvidenceEvent, FusionDecision, Message, RobertaScore
+from .contract import CONFIDENCE_P, CUE_CATEGORY, REQUEST_CUES, Conversation, EvidenceEvent, FusionDecision, Message, RobertaScore
 from .db import evidence_key
 from .validation import Validated
+
+
+def pending_reason(assessment: str, cue: str, requested_subject: Optional[str], confidence: str, roberta_agrees: bool, reasserted: bool) -> Optional[str]:
+    """Why a harmful reading is not confirmed yet, or None if it is confirmed."""
+    if assessment not in ("concerning", "harmful"):
+        return f"whole-chat assessment is {assessment}"
+    if cue in REQUEST_CUES and requested_subject != "child":
+        return "the chat has not established that the child is what is being requested"
+    if confidence != "high" and not roberta_agrees and not reasserted:
+        return f"{confidence} confidence; waiting for later messages to confirm"
+    return None
 
 
 def objectors(validated: Optional[Validated], messages: dict[str, Message]) -> set[str]:
@@ -61,6 +78,7 @@ def fuse(
     roberta_threshold: float,
     run_id: str,
     prior_objectors: frozenset[str] = frozenset(),
+    prior_flagged: frozenset[tuple[str, str]] = frozenset(),
 ) -> tuple[list[EvidenceEvent], list[FusionDecision]]:
     events: dict[str, EvidenceEvent] = {}
     decisions: list[FusionDecision] = []
@@ -100,6 +118,11 @@ def fuse(
                     modifier, mutual_note = "none", "; banter reading rejected: the target objected"
                 elif target not in authors:
                     modifier, mutual_note = "none", "; banter reading unconfirmed: the target never joined in"
+            if validated.assessment == "harmless" and f.modifier == "none" and modifier == "none" and target not in objected:
+                # The model read the whole chat as harmless, so a serious label on one message is out of context.
+                explained_msgs.discard(m.id)
+                decisions.append(FusionDecision(message_id=m.id, cue=f.cue, agreement="context_override", status="suppressed", p=CONFIDENCE_P[f.confidence], sources=[contextual_source or "qwen"], note="dropped: the model's whole-chat reading is harmless"))
+                continue
             p = CONFIDENCE_P[f.confidence]
             sources = [contextual_source or "qwen"]
             r = roberta.get(m.id)
@@ -123,16 +146,16 @@ def fuse(
                 status, agreement = "needs_review", "needs_review"
             if f.verification == "unclear":
                 status, agreement = "needs_review", "needs_review"
-                note += "; verification pass unclear"
-            elif (
-                modifier == "none"
-                and agreement != "agree"
-                and "target objected" not in mutual_note  # the objection is concrete evidence; it outweighs "harmless"
-                and (validated.assessment == "harmless" or (validated.assessment == "uncertain" and f.confidence != "high"))
-            ):
-                # The model's own reading of the whole conversation does not support this finding: keep it, flag it.
-                status, agreement = "needs_review", "needs_review"
-                note += f"; contradicts the model's whole-chat assessment ({validated.assessment})"
+                note += "; pending confirmation: verification pass unclear"
+            elif status == "active" and modifier == "none" and "target objected" not in mutual_note:
+                # The objection is concrete evidence on its own; every other harmful reading must pass the gate.
+                reasserted = (m.id, f.cue) in prior_flagged and m.id not in focus_ids
+                why = pending_reason(validated.assessment, f.cue, f.requested_subject, f.confidence, agreement == "agree", reasserted)
+                if why:
+                    status = "needs_review"
+                    note += f"; pending confirmation: {why}"
+                elif reasserted:
+                    note += "; confirmed: still supported after reading later messages"
             put(
                 EvidenceEvent(
                     key=evidence_key(backend, conv.id, m.id, f.cue, target),

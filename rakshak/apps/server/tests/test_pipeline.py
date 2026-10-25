@@ -123,7 +123,7 @@ def test_history_persists_across_restart(make_client, tmp_path):
     app2 = create_app(Settings(data_dir=tmp_path), roberta=FakeRoberta(), qwen=FakeContextual("qwen"), chatgpt=FakeContextual("chatgpt"), load_models=False)
     from fastapi.testclient import TestClient
 
-    st = TestClient(app2).get("/api/state").json()
+    st = TestClient(app2, client=("127.0.0.1", 50000)).get("/api/state").json()
     assert [m["id"] for m in st["messages"]] == [mid]
     assert len(active(st["evidence"])) == 1 and len(st["conversations"]) == 4 and st["scenarioId"] == "s4-crosschat"
 
@@ -266,12 +266,17 @@ def test_invalid_json_degrades_to_roberta_needs_review(make_client):
 # 16. Ollama unavailable (real adapter, closed port).
 def test_ollama_unavailable(make_client, tmp_path):
     s = Settings(data_dir=tmp_path, ollama_url="http://127.0.0.1:9", qwen_timeout_s=3)
-    c = make_client(qwen=QwenAnalyzer(s), roberta=FakeRoberta({}))
+    c = make_client(qwen=QwenAnalyzer(s), roberta=FakeRoberta({}), rules_fallback=False)
     load(c, "s2-bullying")
     mid = post_msg(c, "s2-c-dev", "p-dev", "hello")
     out = analyze(c, "s2-c-dev", mid).json()
     assert out["result"]["error"]["code"] == "ollama_unavailable"
     assert c.get("/api/health").json()["qwen"]["reachable"] is False
+    # Default: the real adapter's failure hands over to the labelled rules fallback (test_rules_fallback.py).
+    c2 = make_client(qwen=QwenAnalyzer(s), roberta=FakeRoberta({}))
+    load(c2, "s2-bullying")
+    mid = post_msg(c2, "s2-c-dev", "p-dev", "you're such a loser")
+    assert analyze(c2, "s2-c-dev", mid).json()["result"]["models"]["contextual"] == "rules-fallback"
 
 
 # 17. ChatGPT companion unavailable (real adapter, closed port): clear error, nothing fabricated.
@@ -482,9 +487,10 @@ def test_remention_does_not_erase_roberta_agreement(make_client):
     assert ev["agreement"] == "agree" and ev["status"] == "active" and set(ev["sources"]) == {"qwen", "roberta"}
 
 
-def test_harmless_assessment_flags_non_critical_medium_findings(make_client):
+def test_harmless_assessment_drops_contradicting_findings(make_client):
     c = make_client(qwen=FakeContextual("qwen", lambda ctx: {**empty("harmless"), "findings": [finding(alias_of(ctx, "secret"), "secrecy", confidence="medium")]}))
     load(c, "e1-birthday")
     mid = post_msg(c, "e1-c", "p-riya", "don't tell her anything!! it's a secret")
-    ev = analyze(c, "e1-c", mid).json()["evidence"][0]
-    assert ev["status"] == "needs_review"
+    out = analyze(c, "e1-c", mid).json()
+    assert out["evidence"] == []
+    assert out["result"]["fusion"][0]["status"] == "suppressed" and "whole-chat reading is harmless" in out["result"]["fusion"][0]["note"]
