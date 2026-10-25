@@ -133,6 +133,8 @@ def create_app(settings: Optional[Settings] = None, *, roberta: Optional[Roberta
     app.add_middleware(
         CORSMiddleware,
         allow_origins=list(s.cors_origins),
+        # The web app run with `npm run dev` on someone's own laptop (any port), joining this server as a phone would.
+        allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$",
         allow_methods=["GET", "POST"],
         allow_headers=["content-type", "x-rakshak-token"],
     )

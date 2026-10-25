@@ -97,7 +97,7 @@ export function ConnectPhones({ onClose }: { onClose: () => void }) {
   const [err, setErr] = useState(false);
   const [pick, setPick] = useState(0);
   useEffect(() => {
-    const load = () => api.connectInfo().then(setInfo, () => setErr(true));
+    const load = () => api.connectInfo().then((i) => (setInfo(i), setErr(false)), () => setErr(true));
     load();
     // The tunnel address appears a few seconds after `npm run server:remote` starts.
     const t = setInterval(load, 4000);

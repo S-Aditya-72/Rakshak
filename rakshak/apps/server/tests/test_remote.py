@@ -74,3 +74,12 @@ def test_chatgpt_backend_is_local_only(make_client):
 
 
 # Device sync relay: tests/test_sync.py
+
+
+def test_cors_allows_the_web_app_on_another_laptop(make_client):
+    # `npm run dev` on a teammate's own laptop joins a remote server from http://localhost:<port>.
+    c = make_client(client=PHONE, access_token="abcd-efgh-jkmn")
+    pre = {"access-control-request-method": "GET", "access-control-request-headers": "x-rakshak-token"}
+    assert c.options("/api/health", headers={"origin": "http://localhost:5280", **pre}).headers.get("access-control-allow-origin") == "http://localhost:5280"
+    assert c.options("/api/health", headers={"origin": "https://localhost", **pre}).headers.get("access-control-allow-origin") == "https://localhost"
+    assert "access-control-allow-origin" not in c.options("/api/health", headers={"origin": "https://evil.example", **pre}).headers
