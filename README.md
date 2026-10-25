@@ -75,13 +75,28 @@ The models label evidence; RAKSHAK's own deterministic engine decides the level,
 5. **Engine.** Weighted cues with decay, stage progression (rapport → secrecy → request → coercion), safety floors
    (a threat is always L3), per-contact grooming tracks and a child-level bullying track. Each level rise alerts once.
 
-No GPU or no Ollama? A clearly labelled **rules fallback** keeps the demo working, and is never shown as AI.
+### Two ways it runs: the full AI system, and the rules fallback
+
+| | **Full system (intended)** | **Rules fallback (laptops without the models)** |
+|---|---|---|
+| Hardware | a laptop with an NVIDIA GPU (tested: RTX 5060 Laptop, 8 GB) | any laptop, no GPU needed |
+| Per-message classifier | **RoBERTa** (`nayan90k/roberta-finetuned-cyberbullying-detection`, CPU) | off (`RAKSHAK_ROBERTA_ENABLED=0` skips loading it) |
+| Whole-conversation reading | **Qwen3.5 4B via Ollama** (`qwen3.5:4b`, on the GPU) | fixed phrase lists, one message at a time |
+| Verification pass | yes (Qwen re-checks new findings against the transcript) | no |
+| Everything after that | fusion, confirmation gate, case memory, engine, alerts, phones: **the same code** | the same |
+| Speed | ~3–8 s per analysed message | instant |
+| Shown in the app as | *Local AI ready · RoBERTa (cpu) + qwen3.5:4b* | *Ollama not running · rules fallback (not AI)*, and every finding says "rules fallback matched …" |
+
+The fallback switches on by itself when Ollama is not running or `qwen3.5:4b` is not pulled, so the demo (web and
+phones) still works on a laptop without the models. It is a stand-in, not the product: it cannot tell banter, quotes or
+sarcasm from real harm the way Qwen does, and it is never presented as AI. Set `RAKSHAK_RULES_FALLBACK=0` to make
+analysis fail instead. On the team's GPU laptop the same commands run the full system; nothing else changes.
 
 ## The phone app runs on the same models
 
 The Android app is not a mock-up. Every message typed on a phone goes to the laptop running RAKSHAK, is analysed by
 **RoBERTa and Qwen** through exactly the same pipeline as the web simulator, and the result comes back to the phones in
-real time:
+real time. (When the laptop runs the rules fallback instead, the phones get the fallback's results the same way.)
 
 - **Meera's phone** (the protected child): a messenger with RAKSHAK's private nudges, *Pause before you send* when a
   photo is about to go to a flagged contact, a contact profile ("Not in your contacts · account created 3 days ago")
