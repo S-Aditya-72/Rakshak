@@ -1,5 +1,9 @@
 # RAKSHAK
 
+<p align="center">
+  <img src="docs/rakshak-banner.png" alt="RAKSHAK: three phones in the demo, the other person's chat, Meera's protected chat with a private RAKSHAK nudge, and the guardian's critical alert" width="100%" />
+</p>
+
 **An AI safety layer that reads a child's chats as conversations, not single messages.** RAKSHAK spots grooming,
 sextortion and bullying as they build up over days and across chats, and responds in steps: a private nudge to the
 child first, an alert to the guardian next, and a critical alert with guided help when it matters.
