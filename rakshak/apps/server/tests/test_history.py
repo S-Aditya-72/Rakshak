@@ -160,10 +160,27 @@ def test_case_study_history_and_listing(make_client):
     cs = listed["cs-rapid-sextortion"]
     assert cs["kind"] == "case_study" and cs["caseStudy"] == "jordan-demay" and "expect" not in cs
     assert [s["id"] for s in listed.values()][:5] == ["s1-banter", "s2-bullying", "s3-grooming", "s4-crosschat", "s5-group"]
+    # The UI shows the real case identity; the case is stored (and analysed) under neutral names.
+    assert cs["child"]["name"] == "Jordan DeMay" and cs["participants"][0]["name"] == "dani.robertts"
     history(c, "cs-rapid-sextortion", "first-demand").raise_for_status()
     st = c.get("/api/state").json()
-    assert st["child"]["displayName"] == "Arav" and len(st["messages"]) == 7
-    assert not any("₹7,000" in m["text"] for m in st["messages"])
+    assert st["child"]["displayName"] == "Child" and len(st["messages"]) == 7
+    assert {p["displayName"] for p in st["participants"]} == {"Child", "Account 1"}
+    assert [cv["title"] for cv in st["conversations"]] == ["Account 1"]
+    assert not any("pay the rest" in m["text"] for m in st["messages"])
+
+
+def test_case_study_model_input_has_no_real_names(make_client):
+    qwen = FakeContextual("qwen")
+    c = make_client(qwen=qwen)
+    for sid, cp in (("cs-sustained-coercion", "after-block"), ("cs-rapid-sextortion", "first-demand")):
+        history(c, sid, cp).raise_for_status()
+        st = c.get("/api/state").json()
+        analyze(c, st["conversations"][0]["id"]).raise_for_status()
+    sent = json.dumps([ctx.payload for ctx in qwen.calls]).lower()
+    assert len(qwen.calls) == 2
+    for real in ("amanda", "todd", "coban", "jordan", "demay", "robertts", "ogoshi", "reconstructed alias"):
+        assert real not in sent
 
 
 def test_cross_chat_history_preserves_identities(make_client):

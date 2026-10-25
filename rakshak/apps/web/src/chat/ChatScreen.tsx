@@ -1,6 +1,7 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import { ArrowUp, Ban, Check, ChevronDown, ChevronLeft, ChevronRight, HeartHandshake, Image as ImageIcon, Mic, Plus, ShieldCheck, SquarePen, UserRound, Users, Video, X } from 'lucide-react';
-import { useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { Fragment, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { RECONSTRUCTION_LABEL } from '../data/caseStudies';
 import { GUARDIAN } from '../data/meta';
 import { GALLERY, photoOf, type GalleryPhoto } from '../data/gallery';
 import { canCompose } from '../lib/flow';
@@ -33,6 +34,9 @@ export function ChatScreen({ side, overlay, convId, onOpenConv }: ChatScreenProp
   const perspective = useDemo((s) => s.data.perspective);
   const mode = useDemo((s) => s.data.mode);
   const reads = useDemo((s) => s.data.reads);
+  // Case-study reconstructions stay labelled on both phones; anything not in the script is a hypothetical continuation.
+  const scenario = useDemo((s) => (s.data.origin === 'scripted' || s.data.origin === 'history' ? s.data.scenarios.find((x) => x.id === s.data.scenarioId && x.kind === 'case_study') : undefined));
+  const scriptIds = useMemo(() => new Set(scenario?.messages.map((m) => m.id)), [scenario]);
   const other: Side = side === 'victim' ? 'predator' : 'victim';
   const otherTyping = useDemo((s) => s.data.typing[other]);
   const nudgeOpen = useDemo((s) => side === 'victim' && (s.data.victimNudge !== null || s.data.childNotice !== null));
@@ -62,6 +66,7 @@ export function ChatScreen({ side, overlay, convId, onOpenConv }: ChatScreenProp
   const isMine = (m: ChatMessage) => (m.senderId ? m.senderId === me : m.from === side);
   const lastSentId = [...messages].reverse().find((m) => m.kind === 'msg' && isMine(m) && !m.undelivered)?.id;
   const lastIncoming = [...messages].reverse().find((m) => m.kind === 'msg' && !isMine(m));
+  const firstLiveId = scenario ? messages.find((m) => m.kind === 'msg' && !scriptIds.has(m.id))?.id : undefined;
 
   // A real phone: ping for incoming messages, whoosh for sent ones; and read receipts while this chat is on screen.
   const lastSeen = useRef<string | null>(null);
@@ -142,11 +147,13 @@ export function ChatScreen({ side, overlay, convId, onOpenConv }: ChatScreenProp
           <div className="chat-intro-name">{title}</div>
           {group && conv && <div className="chat-intro-sub">{conv.participantIds.map((p) => (p === me ? 'You' : people[p]?.displayName ?? p)).join(', ')}</div>}
           {firstContact && <div className="chat-intro-sub">Not in your contacts</div>}
+          {scenario && <div className="chat-intro-sub cs-bar">{RECONSTRUCTION_LABEL} · not an actual transcript</div>}
         </div>
 
         {messages.map((m, i) => (
+          <Fragment key={m.id}>
+          {m.id === firstLiveId && <div className="sys-row cs-live-sep">Hypothetical continuation · not part of the reconstruction</div>}
           <MessageRow
-            key={m.id}
             m={m}
             mine={m.kind === 'msg' && isMine(m)}
             next={messages[i + 1]}
@@ -156,6 +163,7 @@ export function ChatScreen({ side, overlay, convId, onOpenConv }: ChatScreenProp
             senderName={group && m.kind === 'msg' && !isMine(m) ? people[m.senderId ?? '']?.displayName : undefined}
             senderColor={colorOf(m.senderId)}
           />
+          </Fragment>
         ))}
 
         <AnimatePresence>

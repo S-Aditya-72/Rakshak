@@ -1203,3 +1203,17 @@
 a.help-num {
   text-decoration: none;
 }
+
+/* Case-study reconstruction label in the chat header (on both phones). */
+.chat-intro-sub.cs-bar {
+  margin-top: 4px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-weight: 600;
+  color: #a37800;
+  background: rgba(255, 214, 10, 0.16);
+}
+.sys-row.cs-live-sep {
+  color: #a37800;
+  font-weight: 600;
+}

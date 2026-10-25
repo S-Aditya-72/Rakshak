@@ -264,9 +264,11 @@ from its own starting point and clears its server memory). Switching modes, or a
   create chats, use Settings → Sim clock `+1 day` to test multi-day memory and decay.
 - **Reassessment.** With the local backend every saved live message, including the child's own objections, triggers a
   contextual reassessment (bursts are coalesced on the server). ChatGPT never runs automatically.
-- **Case studies** (Amanda Todd, Jordan DeMay): sourced background, a clearly labelled fictional recreation, guided
-  playback, *Continue live from here* checkpoints, "Documented events" vs "Possible support with RAKSHAK", what the
-  pipeline actually flagged in this run, and sources. The real cases' outcomes are never given to a model.
+- **Case studies** (Amanda Todd, Jordan DeMay): the real case's name, one sourced sentence, a visible "Fictional
+  reconstruction of the incident" label, *Play reconstruction* and *Continue live* (checkpoints; later messages are a
+  hypothetical continuation). Playback pauses once at the first real guardian alert ("An opportunity to intervene") and
+  links to Get help. Background, attribution and sources are in a collapsed section. The models see neutral names, never
+  the real ones, and the real cases' outcomes are never given to a model.
 - **Get help** (guardian, from L2/L3 alerts): understand the concern (recorded messages, AI interpretations and the
   deterministic level shown separately), support the child, review evidence and export a redacted HTML/JSON report, and
   complaint options (standard complaint, anonymous-reporting eligibility, official portal). Nothing is submitted or sent;

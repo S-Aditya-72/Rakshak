@@ -29,7 +29,7 @@ import { NudgeCard } from '../alerts/NudgeCard';
 import { ChatScreen } from '../chat/ChatScreen';
 import { PhoneFrame } from '../chat/PhoneFrame';
 import { CaseCard, DebugFeed, EVIDENCE_EVENT, EvidencePanel, ModelsPanel, ScoreChart } from '../console/Analytics';
-import { CaseStudyView } from '../console/CaseStudyView';
+import { CaseStudyStrip, CaseStudyView } from '../console/CaseStudyView';
 import { ChatGPTPanel } from '../console/ChatGPTPanel';
 import { Segmented } from '../console/Segmented';
 import { ServerSettings } from '../console/ServerSettings';
@@ -660,6 +660,7 @@ export function SimulationPage({ initialView = 'phones' }: { initialView?: 'phon
       </header>
 
       <Caption />
+      <CaseStudyStrip onOpenCaseStudy={setCaseStudy} />
 
       <main className="sim-main">
         <AnimatePresence>{studioOpen && <Studio onClose={() => setStudioOpen(false)} onOpenCaseStudy={setCaseStudy} />}</AnimatePresence>

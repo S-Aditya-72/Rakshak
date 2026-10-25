@@ -6,6 +6,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const calls: { analyze: { conversationId: string; uptoMessageId?: string; backend: string; trigger: string }[]; history: number; reset: number; addMessage: number } = { analyze: [], history: 0, reset: 0, addMessage: 0 };
 let serverState: any;
 let failAnalyze = false;
+let failLoad = false;
+let loads: string[] = [];
 
 const scenario = {
   id: 's2-bullying',
@@ -28,6 +30,34 @@ const scenario = {
   checkpoints: [{ id: 'cp', after: 3, label: 'Day 2', intro: '', suggestions: ['presenter idea'] }],
   presenter: [],
 };
+
+/** A case study: real names in the listing, neutral names in the server's case (what the models see). */
+const caseStudy = {
+  ...scenario,
+  id: 'cs-test',
+  kind: 'case_study',
+  caseStudy: 'jordan-demay',
+  title: 'Jordan DeMay',
+  child: { id: 'p-meera', name: 'Jordan DeMay' },
+  participants: [{ id: 'p-dev', name: 'dani.robertts', role: 'contact' }],
+  conversations: [{ id: 'c1', kind: 'private', title: 'dani.robertts', participants: ['p-meera', 'p-dev'] }],
+  messages: scenario.messages.map((m, i) => ({ ...m, id: `cs-test-m0${i + 1}` })),
+};
+
+function caseStudyState(generation: number) {
+  const st = stateWith([], 'scripted', null, generation);
+  return {
+    ...st,
+    child: { id: 'p-meera', displayName: 'Child', role: 'protected_child' },
+    participants: [
+      { id: 'p-meera', displayName: 'Child', role: 'protected_child' },
+      { id: 'p-dev', displayName: 'Account 1', role: 'contact' },
+    ],
+    conversations: [{ ...st.conversations[0], title: 'Account 1' }],
+    scenarioId: 'cs-test',
+    case: { ...st.case, scenarioId: 'cs-test' },
+  };
+}
 
 function stateWith(messages: any[], origin: string | null, checkpoint: number | null, generation = 1) {
   return {
@@ -101,11 +131,14 @@ vi.mock('./lib/api', async () => {
     onServerChange: () => () => {},
     api: {
       health: async () => ({ server: { ok: true }, roberta: {}, qwen: {}, chatgpt: { status: 'disconnected' } }),
-      scenarios: async () => [scenario],
+      scenarios: async () => [scenario, caseStudy],
       state: async () => serverState,
-      loadScenario: async () => {
-        serverState = stateWith([], 'scripted', null, (serverState?.case?.generation ?? 0) + 1);
-        return scenario;
+      loadScenario: async (id: string) => {
+        loads.push(id);
+        if (failLoad) throw new ApiError(503, 'server_offline', 'Inference service unreachable');
+        const generation = (serverState?.case?.generation ?? 0) + 1;
+        serverState = id === caseStudy.id ? caseStudyState(generation) : stateWith([], 'scripted', null, generation);
+        return id === caseStudy.id ? caseStudy : scenario;
       },
       loadHistory: async (_id: string, target: { checkpoint?: string; upto?: number }) => {
         calls.history++;
@@ -157,6 +190,8 @@ beforeEach(async () => {
   calls.reset = 0;
   calls.addMessage = 0;
   failAnalyze = false;
+  failLoad = false;
+  loads = [];
   serverState = stateWith([], null, null, 0);
   store.useDemo.setState({ data: store.reduce(get(), { type: 'reset' }) });
   store.useDemo.getState().dispatch({ type: 'setBackend', backend: 'inhouse' });
@@ -287,5 +322,52 @@ describe('alert routing', () => {
     const s = store.reduce({ ...base(), guardianSheet: alert }, { type: 'openHelp', alert });
     expect(s.helpFor?.caseKey).toBe('p-meera#1');
     expect(s.guardianSheet).toBeNull();
+  });
+});
+
+describe('case-study playback', () => {
+  it('Play reconstruction loads that case study, shows the real names, and starts playback', async () => {
+    await store.selectScenario('s2-bullying');
+    const err = await store.playCaseStudy('cs-test');
+    const d = get();
+    store.pause();
+    expect(err).toBeNull();
+    expect(loads).toEqual(['s2-bullying', 'cs-test']);
+    expect(d.mode).toBe('A');
+    expect(d.scenarioId).toBe('cs-test');
+    expect(d.origin).toBe('scripted');
+    expect(d.playing).toBe(true);
+    // The server (and the models) hold neutral names; the screen shows the real case identities.
+    expect(serverState.child.displayName).toBe('Child');
+    expect(store.childNameOf(d)).toBe('Jordan DeMay');
+    expect(d.participants.find((p) => p.id === 'p-dev')?.displayName).toBe('dani.robertts');
+    expect(d.conversations[0].title).toBe('dani.robertts');
+  });
+
+  it('a failed load reports an error, plays nothing, and a retry works', async () => {
+    await store.selectScenario('s2-bullying');
+    failLoad = true;
+    const err = await store.playCaseStudy('cs-test');
+    expect(err).toMatch(/unreachable/i);
+    expect(get().playing).toBe(false);
+    expect(get().scenarioId).not.toBe('cs-test');
+    failLoad = false;
+    expect(await store.playCaseStudy('cs-test')).toBeNull();
+    expect(get().scenarioId).toBe('cs-test');
+    store.pause();
+  });
+
+  it('a second click while loading is ignored', async () => {
+    const [a, b] = await Promise.all([store.playCaseStudy('cs-test'), store.playCaseStudy('cs-test')]);
+    store.pause();
+    expect(a).toBeNull();
+    expect(b).toBeNull();
+    expect(loads).toEqual(['cs-test']);
+  });
+
+  it('core scenarios keep their stored names', async () => {
+    await store.selectScenario('s2-bullying');
+    expect(store.childNameOf(get())).toBe('Meera');
+    expect(get().participants.find((p) => p.id === 'p-dev')?.displayName).toBe('Dev');
   });
 });

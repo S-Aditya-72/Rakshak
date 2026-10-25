@@ -434,6 +434,7 @@ function Evidence({ alert, child }: { alert: AlertItem; child: string }) {
         backendLabel: `${BACKEND_META[d.backend].label} (${BACKEND_META[d.backend].where})`,
         models: [...new Set(d.messages.flatMap((m) => (m.analysis?.run ? [m.analysis.run.models.contextual, m.analysis.run.models.classifier] : [])).filter((x): x is string => !!x))],
         caseKey: caseKeyFor(d),
+        reconstruction: d.scenarios.find((s) => s.id === d.scenarioId)?.kind === 'case_study',
       }),
     [reportId, createdAt, alert, items, selected, edits, redact, rules, alias, child, d, summary, notes],
   );

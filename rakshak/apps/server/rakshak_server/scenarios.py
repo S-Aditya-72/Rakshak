@@ -7,7 +7,9 @@ scenario verdicts are produced by the same live pipeline as unscripted chat.
 case (playback saves them one by one; a history preload saves the prefix up to a checkpoint), so future script
 lines, presenter suggestions and expected outcomes never enter model input.
 
-Fictional case-study recreations live in `case-studies/`. They are demonstrations, not evaluation fixtures.
+Fictional case-study reconstructions live in `case-studies/`. They are demonstrations, not evaluation fixtures.
+They show the real case identities in the UI, but a person or chat may carry a neutral `modelName` / `modelTitle`:
+the case is stored under that name, so the models (which see stored names) never get a cue to recall the real case.
 """
 
 from __future__ import annotations
@@ -69,12 +71,17 @@ def list_scenarios(d: Path) -> list[dict]:
     return out
 
 
+def stored_name(person: dict) -> str:
+    """Name the case is stored (and so analysed) under: neutral for case-study people, else the display name."""
+    return person.get("modelName", person["name"])
+
+
 def _create_cast(store: Store, sc: dict) -> None:
     child = sc["child"]
     for p in sc["participants"]:
-        store.upsert_participant(child["id"], Participant(id=p["id"], display_name=p["name"], role=p.get("role", "peer")))
+        store.upsert_participant(child["id"], Participant(id=p["id"], display_name=stored_name(p), role=p.get("role", "peer")))
     for c in sc["conversations"]:
-        store.create_conversation(child["id"], c["id"], c["kind"], c["title"], c["participants"])
+        store.create_conversation(child["id"], c["id"], c["kind"], c.get("modelTitle", c["title"]), c["participants"])
 
 
 def load_scenario(store: Store, d: Path, scenario_id: str) -> dict:
@@ -82,7 +89,7 @@ def load_scenario(store: Store, d: Path, scenario_id: str) -> dict:
     sc = read_scenario(d, scenario_id)
     child = sc["child"]
     with store.tx():
-        store.reset_child(child["id"], child["name"], scenario_id=scenario_id, origin="scripted")
+        store.reset_child(child["id"], stored_name(child), scenario_id=scenario_id, origin="scripted")
         _create_cast(store, sc)
     return public_view(sc)
 
@@ -121,7 +128,7 @@ def load_history(store: Store, d: Path, scenario_id: str, checkpoint_id: Optiona
     reused = not force and meta["scenarioId"] == scenario_id and meta["origin"] == "history" and meta["checkpoint"] == n and saved[:n] == expected
     if not reused:
         with store.tx():
-            store.reset_child(child["id"], child["name"], scenario_id=scenario_id, origin="history", checkpoint=n)
+            store.reset_child(child["id"], stored_name(child), scenario_id=scenario_id, origin="history", checkpoint=n)
             _create_cast(store, sc)
             for mid, m in prefix:
                 store.add_message(child["id"], mid, m["conv"], m["from"], m["day"], m["time"], m["text"].strip())

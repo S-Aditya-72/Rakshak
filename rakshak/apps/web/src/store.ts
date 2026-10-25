@@ -60,6 +60,8 @@ export interface DemoData {
   /** Alert whose "Get help" workflow is open (always tied to the alert's own case). */
   helpFor: AlertItem | null;
   helpTab: HelpTab;
+  /** Case-study playback paused itself at this guardian alert (once per run), offering review or continue. */
+  csHold: string | null;
 
   // ---- the case ----
   origin: Origin | null;
@@ -195,6 +197,7 @@ function initial(keep?: Partial<DemoData>): DemoData {
     childNotice: null,
     helpFor: null,
     helpTab: 'understand',
+    csHold: null,
     origin: null,
     checkpoint: null,
     generation: 0,
@@ -680,15 +683,24 @@ export async function hydrateFromServer() {
   applyServerState(st);
 }
 
+/** Case studies are stored (and analysed) under neutral names; people on screen see the real case identities. */
+function shownNames(sc: ScenarioView | undefined) {
+  const cs = sc?.kind === 'case_study';
+  const people = new Map<string, string>(cs ? [[sc.child.id, sc.child.name], ...sc.participants.map((p): [string, string] => [p.id, p.name])] : []);
+  const titles = new Map<string, string>(cs ? sc.conversations.map((c): [string, string] => [c.id, c.title]) : []);
+  return { person: (id: string, stored: string) => people.get(id) ?? stored, title: (id: string, stored: string) => titles.get(id) ?? stored };
+}
+
 function applyServerState(st: ServerState) {
   const d = get();
-  const participants: ParticipantView[] = st.participants.map((p) => ({ id: p.id, displayName: p.displayName, role: p.role }));
-  const conversations: ConversationView[] = st.conversations.map((c) => ({ id: c.id, kind: c.kind, title: c.title, participantIds: c.participantIds }));
-  const backend = d.backend;
   const meta = st.case ?? { generation: 0, scenarioId: st.scenarioId, origin: null, checkpoint: null };
+  const shown = shownNames(d.scenarios.find((s) => s.id === (meta.scenarioId ?? st.scenarioId)));
+  const participants: ParticipantView[] = st.participants.map((p) => ({ id: p.id, displayName: shown.person(p.id, p.displayName), role: p.role }));
+  const conversations: ConversationView[] = st.conversations.map((c) => ({ id: c.id, kind: c.kind, title: shown.title(c.id, c.title), participantIds: c.participantIds }));
+  const backend = d.backend;
   const origin: Origin | null = meta.origin ?? (st.scenarioId ? 'scripted' : st.messages.length || st.conversations.length ? 'fresh' : null);
   const caseKey = caseKeyOf(st.child.id, meta.generation);
-  const childName = st.child.displayName;
+  const childName = shown.person(st.child.id, st.child.displayName);
   // Rebuild per-message analyses from the persisted runs (latest run that judged each message wins).
   const runFor = new Map<string, AnalysisResult>();
   for (const r of st.runs) if (!r.stale) for (const id of r.focusMessageIds) runFor.set(id, r as AnalysisResult);
@@ -1114,7 +1126,7 @@ export async function continueLiveFromHere() {
   pause();
   try {
     const meta = await api.continueCase(d.childId);
-    dispatch({ type: 'hydrate', state: { origin: 'history', checkpoint: meta.checkpoint, generation: meta.generation, mode: 'B', caption: null } });
+    dispatch({ type: 'hydrate', state: { origin: 'history', checkpoint: meta.checkpoint, generation: meta.generation, mode: 'B', caption: null, csHold: null } });
     savePrefs(get());
   } catch (e) {
     dispatch({ type: 'runError', error: errOf(e) });
@@ -1162,16 +1174,17 @@ export function checkpointAt(sc: ScenarioView | null, n: number): Checkpoint | n
   return sc?.checkpoints.find((c) => c.after === n) ?? null;
 }
 
-/** Load a scenario for playback: resets the case on the server and creates its people and chats. */
-export async function selectScenario(id: string) {
+/** Load a scenario for playback: resets the case on the server and creates its people and chats. True if loaded. */
+export async function selectScenario(id: string): Promise<boolean> {
   runToken++;
   bumpEpoch();
+  csHoldDone = false;
   const keep = get();
   dispatch({ type: 'reset' });
   if (id === PREVIEW_ID) {
     dispatch({ type: 'hydrate', state: { scenarioId: PREVIEW_ID, origin: 'preview', ...previewCast() } });
     dispatch({ type: 'setActiveConv', id: 'preview-c-kabir' });
-    return;
+    return true;
   }
   try {
     const sc = await api.loadScenario(id);
@@ -1181,10 +1194,53 @@ export async function selectScenario(id: string) {
     dispatch({ type: 'setActiveConv', id: sc.messages[0]?.conversationId ?? conversations[0].id });
     // The generation identifies this case for its alerts.
     await hydrateFromServer();
+    return get().serverOnline !== false;
   } catch (e) {
     dispatch({ type: 'hydrate', state: { scenarioId: keep.scenarioId } });
     dispatch({ type: 'runError', error: { code: 'server_offline', message: e instanceof ApiError ? e.message : 'Could not load scenario' } });
+    return false;
   }
+}
+
+// ---------- case-study playback ----------
+
+let csStarting = false;
+/** The current case-study run already paused at its first guardian alert (reset whenever the case is loaded again). */
+let csHoldDone = false;
+
+/**
+ * "Play reconstruction": load this case study, confirm it is the case now loaded, then start Mode A playback.
+ * Returns null once playback has started, or an error message (nothing is played on failure). Clicks while it is
+ * starting are ignored. Cloud analysis still waits for the owner's explicit "Analyze with ChatGPT".
+ */
+export async function playCaseStudy(id: string): Promise<string | null> {
+  if (csStarting) return null;
+  csStarting = true;
+  try {
+    if (get().playing) pause();
+    setMode('A');
+    const ok = await selectScenario(id);
+    const d = get();
+    if (!ok || d.scenarioId !== id || d.origin !== 'scripted' || d.cursor !== 0) {
+      return d.runError?.message ?? 'The reconstruction did not load. Check that the inference service is running, then try again.';
+    }
+    void play();
+    return null;
+  } finally {
+    csStarting = false;
+  }
+}
+
+/** Case-study playback only, once per run: stop at the first new guardian-level alert so it can be reviewed. */
+function holdAtGuardianAlert(before: Set<string>): boolean {
+  const d = get();
+  if (csHoldDone || d.origin !== 'scripted' || currentScenario()?.kind !== 'case_study') return false;
+  const alert = d.alerts.find((a) => !before.has(a.id) && a.level >= 2 && !a.historical && !a.withdrawn);
+  if (!alert) return false;
+  csHoldDone = true;
+  pause();
+  dispatch({ type: 'hydrate', state: { csHold: alert.id } });
+  return true;
 }
 
 function previewCast(): Partial<DemoData> {
@@ -1252,10 +1308,13 @@ async function runStep(i: number, token: number): Promise<boolean> {
     // it is in the focus of the next run (everything since the last analysed message), and a trailing child reply
     // is analysed when playback stops (see play()).
     if (autoAnalyses(get().backend) && step.senderId !== get().childId) {
-      const before = get().alerts.length;
+      const before = new Set(get().alerts.map((a) => a.id));
       await analyzeConversation(step.conversationId, msg.id, 'auto');
       if (epoch !== caseEpoch || token !== runToken) return false;
-      if (get().alerts.length > before) await wait(2600);
+      if (get().alerts.length > before.size) {
+        if (holdAtGuardianAlert(before)) return false;
+        await wait(2600);
+      }
     }
   }
   await wait(450);
@@ -1267,6 +1326,7 @@ export async function play() {
   if (d.playing || d.mode !== 'A' || !d.scenarioId || (d.origin !== 'scripted' && d.origin !== 'preview')) return;
   const token = ++runToken;
   const epoch = caseEpoch;
+  if (d.csHold) dispatch({ type: 'hydrate', state: { csHold: null } });
   dispatch({ type: 'setPlaying', playing: true });
   while (get().playing && token === runToken && get().cursor < scriptLength()) {
     const ok = await runStep(get().cursor, token);

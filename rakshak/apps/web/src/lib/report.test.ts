@@ -105,6 +105,17 @@ describe('export', () => {
     expect(doc.disclaimers.join(' ')).toMatch(/not a legal determination/i);
   });
 
+  it('labels a case-study reconstruction as reconstructed dialogue, not authentic evidence', () => {
+    const plain = buildExport(opts());
+    const doc = buildExport(opts({ reconstruction: true }));
+    expect(plain.disclaimers[0]).toMatch(/not a real incident/i);
+    expect(doc.designation).toMatch(/fictional reconstruction/i);
+    expect(doc.disclaimers[0]).toMatch(/not authentic evidence/i);
+    expect(doc.disclaimers.join(' ')).not.toMatch(/not a real incident/i);
+    expect(toHtml(doc)).toContain('RECONSTRUCTED DIALOGUE, NOT AUTHENTIC EVIDENCE');
+    expect(doc.disclaimers.slice(1)).toEqual(plain.disclaimers.slice(1));
+  });
+
   it('escapes message text so it cannot inject markup', () => {
     const html = toHtml(buildExport(opts()));
     expect(html).not.toContain('<script>');

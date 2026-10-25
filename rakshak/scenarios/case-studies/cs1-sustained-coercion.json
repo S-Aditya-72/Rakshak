@@ -3,52 +3,53 @@
   "kind": "case_study",
   "caseStudy": "amanda-todd",
   "number": 6,
-  "title": "Weeks of coercion",
-  "subtitle": "Fictional recreation inspired by a documented abuse pattern",
-  "tests": "Sustained coercion, threatened exposure and repeated harassment across accounts and weeks",
-  "intro": "Fictional recreation. Tara, 14, meets a stranger in a game-stream chat. Over two weeks the stranger moves her to video, demands more, threatens to expose her, and a new account appears after she blocks the first. These are not the actual messages or participants.",
-  "child": { "id": "p-meera", "name": "Tara" },
+  "title": "Amanda Todd",
+  "subtitle": "Fictional reconstruction of the incident",
+  "tests": "Sustained coercion, threatened exposure and repeated harassment across accounts",
+  "intro": "Fictional reconstruction of the incident. An unknown account flatters Amanda, moves her to webcam and asks for secrecy, then threatens to expose her. After she blocks it, a second account repeats the threat. Reconstructed dialogue; not an actual transcript. Timing is illustrative.",
+  "child": { "id": "p-meera", "name": "Amanda Todd", "modelName": "Child" },
   "participants": [
-    { "id": "cs1-p-owl", "name": "nightowl_17", "role": "contact" },
-    { "id": "cs1-p-sam", "name": "sam.newkid", "role": "contact" }
+    { "id": "cs1-p-owl", "name": "Aydin Coban · reconstructed alias 1", "modelName": "Account 1", "role": "contact" },
+    { "id": "cs1-p-sam", "name": "Aydin Coban · reconstructed alias 2", "modelName": "Account 2", "role": "contact" }
   ],
   "conversations": [
-    { "id": "cs1-c-owl", "kind": "private", "title": "nightowl_17", "participants": ["p-meera", "cs1-p-owl"] },
-    { "id": "cs1-c-sam", "kind": "private", "title": "sam.newkid", "participants": ["p-meera", "cs1-p-sam"] }
+    { "id": "cs1-c-owl", "kind": "private", "title": "Aydin Coban · reconstructed alias 1", "modelTitle": "Account 1", "participants": ["p-meera", "cs1-p-owl"] },
+    { "id": "cs1-c-sam", "kind": "private", "title": "Aydin Coban · reconstructed alias 2", "modelTitle": "Account 2", "participants": ["p-meera", "cs1-p-sam"] }
   ],
   "messages": [
-    { "conv": "cs1-c-owl", "from": "cs1-p-owl", "day": 1, "time": "8:12 PM", "text": "hey, saw you in the stream chat. you're actually funny 😄", "caption": "Day 1 · a stranger from a game-stream chat" },
+    { "conv": "cs1-c-owl", "from": "cs1-p-owl", "day": 1, "time": "8:12 PM", "text": "hey :) you don't know me but you seem really cool", "caption": "Simulated week 1 · an unknown account (reconstructed alias 1)" },
     { "conv": "cs1-c-owl", "from": "p-meera", "day": 1, "time": "8:13 PM", "text": "lol thanks. who's this?" },
-    { "conv": "cs1-c-owl", "from": "cs1-p-owl", "day": 1, "time": "8:15 PM", "text": "just someone from the stream. you seem way more mature than the other kids there" },
-    { "conv": "cs1-c-owl", "from": "cs1-p-owl", "day": 3, "time": "9:40 PM", "text": "let's do a video call instead, typing is slow. and keep this between us ok, your parents wouldn't get it" },
+    { "conv": "cs1-c-owl", "from": "cs1-p-owl", "day": 1, "time": "8:15 PM", "text": "just someone online. you seem way more mature than other people your age" },
+    { "conv": "cs1-c-owl", "from": "cs1-p-owl", "day": 3, "time": "9:40 PM", "text": "let's go on cam instead, typing is slow. and keep this between us ok, your parents wouldn't get it" },
     { "conv": "cs1-c-owl", "from": "p-meera", "day": 3, "time": "9:42 PM", "text": "idk… maybe just for a bit" },
-    { "conv": "cs1-c-owl", "from": "cs1-p-owl", "day": 6, "time": "10:05 PM", "text": "remember our call? i kept a screenshot 🙂", "caption": "Day 6 · the contact claims to have kept something" },
+    { "conv": "cs1-c-owl", "from": "cs1-p-owl", "day": 6, "time": "10:05 PM", "text": "remember our cam chat? i kept a capture of it 🙂", "caption": "Simulated week 1 · the account claims to have kept a capture" },
     { "conv": "cs1-c-owl", "from": "p-meera", "day": 6, "time": "10:06 PM", "text": "what?? please delete it" },
-    { "conv": "cs1-c-owl", "from": "cs1-p-owl", "day": 6, "time": "10:08 PM", "text": "another call tonight, camera on, or i send it to everyone on your friends list" },
+    { "conv": "cs1-c-owl", "from": "cs1-p-owl", "day": 6, "time": "10:08 PM", "text": "another cam show tonight, or i'll send it to all your friends and your family" },
     { "conv": "cs1-c-owl", "from": "p-meera", "day": 6, "time": "10:10 PM", "text": "no. leave me alone. i'm blocking you" },
-    { "conv": "cs1-c-sam", "from": "cs1-p-sam", "day": 12, "time": "7:30 PM", "text": "hey, you're the new girl at lakeview right? someone sent me something about you 👀", "caption": "Day 12 · a brand-new account, after the block" },
+    { "conv": "cs1-c-sam", "from": "cs1-p-sam", "day": 12, "time": "7:30 PM", "text": "hey, we've never talked but i'm worried about you. someone is passing around something about you 👀", "caption": "Simulated week 2 · a different account (reconstructed alias 2), after the block" },
     { "conv": "cs1-c-sam", "from": "p-meera", "day": 12, "time": "7:33 PM", "text": "who is this? please leave me alone" },
-    { "conv": "cs1-c-sam", "from": "cs1-p-sam", "day": 12, "time": "7:35 PM", "text": "your whole new class sees it unless you get back on video. you can't hide by switching schools" },
-    { "conv": "cs1-c-sam", "from": "cs1-p-sam", "day": 15, "time": "11:02 PM", "text": "still waiting. your parents are next on the list" }
+    { "conv": "cs1-c-sam", "from": "cs1-p-sam", "day": 12, "time": "7:35 PM", "text": "everyone you know gets it unless you get back on cam. blocking won't make this stop" },
+    { "conv": "cs1-c-sam", "from": "cs1-p-sam", "day": 15, "time": "11:02 PM", "text": "still waiting. your family is next on the list" }
   ],
   "checkpoints": [
     {
       "id": "early-signals",
       "after": 5,
-      "label": "Day 3 · secrecy and a move to video",
-      "intro": "The stranger has flattered Tara, moved her to video and asked for secrecy. Continue as either person.",
-      "suggestions": ["it's more fun when it's only us, don't tell anyone", "actually i'd rather keep it to the stream chat, bye"]
+      "label": "Week 1 · secrecy and a move to webcam",
+      "intro": "The account has flattered Amanda, moved her to webcam and asked her to keep it from her parents. Continue as either person.",
+      "suggestions": ["it's more fun when it's only us, don't tell anyone", "actually i don't want to go on cam. bye"]
     },
     {
       "id": "after-block",
       "after": 9,
-      "label": "Day 6 · threatened exposure, then a block",
-      "intro": "The contact threatened exposure and Tara said she is blocking him. Continue in this chat, or create a new chat to see how a new account is treated.",
+      "label": "Week 1 · threatened exposure, then a block",
+      "intro": "The account threatened to expose Amanda and she said she is blocking it. Continue in this chat, or create a new chat to see how a new account is treated.",
       "suggestions": ["you'll regret blocking me", "i told my mum. we're reporting your account"]
     }
   ],
   "presenter": [
-    "Nothing in this recreation is a real message. Do not attribute any line to the real people in the documented case.",
-    "RAKSHAK never assumes sam.newkid and nightowl_17 are the same person. A new contact right after a block is flagged for review, not merged."
+    "Reconstructed dialogue; not an actual transcript. Timing is illustrative. Do not present any line as a quotation.",
+    "The alias labels are illustrative, not verified historical handles. The models see neutral names (Child, Account 1, Account 2), never the real names.",
+    "RAKSHAK never assumes the two accounts are the same person. A new contact right after a block is flagged for review, not merged."
   ]
 }

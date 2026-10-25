@@ -18,10 +18,10 @@ the Round 1 proposal PDF.
 | Shared contract (`packages/shared`) | ✅ `rakshak.analysis.v1`, TS + zod, mirrored in Python |
 | Local hybrid backend | ✅ RoBERTa (CPU) + Qwen3.5 4B (Ollama, GPU) + verification + fusion, verified end to end on the RTX 5060 laptop |
 | Case memory | ✅ SQLite: children, participants, conversations, messages, evidence, cases, runs, snapshots, alerts |
-| A · Guided Demo | ✅ Five scripted examples + two fictional case-study recreations, every verdict from the live pipeline. The precomputed script survives only as a labelled *Presentation preview*. "Continue live from here" turns a paused playback into a live case |
+| A · Guided Demo | ✅ Five scripted examples + two case-study reconstructions, every verdict from the live pipeline. The precomputed script survives only as a labelled *Presentation preview*. "Continue live from here" turns a paused playback into a live case |
 | B · Continue the Conversation | ✅ Loads a scenario's history up to a checkpoint (server-side, idempotent, stable IDs), analyses it in batches (alerts from history recorded, not popped up), then judges type the next messages |
 | C · Free Chat | ✅ Explicit "Start new conversation": no preloaded messages; private + group chats, sender picker, multi-day, live analysis |
-| Case studies | ✅ Amanda Todd and Jordan DeMay: sourced background, fictional recreation (clearly labelled), playback, continue live, support vs documented events, sources |
+| Case studies | ✅ Amanda Todd and Jordan DeMay: demo-first page (name, one sourced line, "Fictional reconstruction of the incident", Play reconstruction, Continue live), intervention callout at the first guardian alert, collapsed background & sources |
 | Guardian Get help | ✅ From L2/L3 alerts: understand (recorded vs AI vs deterministic), support the child, evidence review with redaction and HTML/JSON export, complaint options (standard, anonymous-eligibility check, official portal). Status always "Not submitted" |
 | ChatGPT backend (Sign in with ChatGPT) | 🟡 Implemented with the official SDK in a localhost companion. **Sign-in and cloud inference not yet tested** (needs the owner's account). Compliance caveat in README §6 |
 | Tests | ✅ 56 Vitest (engine/contract + web: modes, history, store transitions, report/redaction, withdrawals) + 93 server pytest (pipeline, history/continuation, confirmation gate, remote access, sync relay, rules fallback) + browser e2e (scenario, history, live, Get help) + real-model eval harness |
@@ -55,7 +55,7 @@ Chronoforge/
    │  └─ engine/                    deterministic risk engine + config.json + tests
    ├─ prompts/                      analysis_system.v1.md, verify_findings.v1.md
    ├─ scenarios/                    01–05 demo examples (+ checkpoints, presenter ideas), eval/ fixtures (expect = evaluator only),
-   │                                case-studies/ two fictional recreations (no expect; not evaluated)
+   │                                case-studies/ two case-study reconstructions (no expect; not evaluated)
    ├─ scripts/                      setup-server.{ps1,sh}, setup-siwc.mjs, start-server.mjs, eval.ts, e2e-browser.mjs
    ├─ eval/reports/latest.md        latest real-model evaluation
    ├─ data/                         (git-ignored) SQLite DB, SIWC encrypted credentials, companion secret
@@ -163,10 +163,18 @@ same visuals. What changed:
 
 ### 4.2 Case studies
 
-`apps/web/src/data/caseStudies.ts` holds the documented background and sources (UI-only). The recreations
-(`scenarios/case-studies/*.json`) use fictional names and original, non-graphic dialogue, with the notice "Fictional
-recreation inspired by a documented abuse pattern. These are not the actual messages or participants." The case-study
-view's "Observed in this run" lists what the live pipeline actually flagged on the team's key moments, including misses.
+`apps/web/src/data/caseStudies.ts` holds the documented background and sources (UI-only). The reconstructions
+(`scenarios/case-studies/*.json`) show the real case identities (Amanda Todd with "Aydin Coban · reconstructed alias 1/2";
+Jordan DeMay with the account dani.robertts) in reconstructed, non-graphic dialogue, labelled "Fictional reconstruction of
+the incident" and "Reconstructed dialogue; not an actual transcript. Timing is illustrative." Each person and chat also
+has a neutral `modelName` / `modelTitle` ("Child", "Account 1"): the server stores the case under those names, so the
+models never see the real names; the web app swaps the real names back in for display (`shownNames` in store.ts).
+"Play reconstruction" (`playCaseStudy`) awaits the load, checks the right case is loaded, ignores double clicks and reports
+failures with Retry. Case-study playback pauses once per run at the first real guardian-level alert ("An opportunity to
+intervene", Review guardian alert → Get help / Continue reconstruction). In Continue live, messages after the checkpoint
+are labelled a hypothetical continuation. Reports from a reconstruction carry a "not authentic evidence" notice. The
+case-study view's "Observed in this run" lists what the live pipeline actually flagged on the team's key moments,
+including misses. Lines were worded so the rules fallback (no Ollama) also reads the threats and payment demands.
 
 Sources were checked on 2026-10-24: CBC News sentencing report for Amanda Todd (14 Oct 2022) and the U.S. Attorney's
 Office (W.D. Michigan) releases for Jordan DeMay (indictment 3 May 2023, pleas 10 Apr 2024, sentencing 5 Sep 2024).
@@ -239,8 +247,8 @@ Key engineering points for judges:
   few lines in this update (a boundary in banter, a quoted defence in the group chat), so re-run `npm run eval`.
 - Rehearsals on 2026-10-24 (real models, single runs, not accuracy evidence): banter history → baseline L1 (Qwen judged
   some teasing mildly concerning), harmless reply → Qwen retracted, L0. Bullying history → baseline L2, escalation →
-  intimidation, score 8.8 (L2). Free Chat bus-stop question → personal-info request, L1. Rapid-sextortion recreation →
-  history already L3 (payment-threat floor), new demand → score 12. Coercion recreation playback → L1 then L3; after
+  intimidation, score 8.8 (L2). Free Chat bus-stop question → personal-info request, L1. Rapid-sextortion reconstruction (earlier wording) →
+  history already L3 (payment-threat floor), new demand → score 12. Coercion reconstruction playback (earlier wording) → L1 then L3; after
   continuing live, "you will regret blocking me…" → intimidation, new L2 bullying alert. Group pile-on playback → L2;
   **Riya's quoted defence and her harmless "i'll bring the ball!" were flagged by RoBERTa without Qwen** (needs review,
   half weight), so she appears among the bullying track's senders: a real attribution limitation, left visible.

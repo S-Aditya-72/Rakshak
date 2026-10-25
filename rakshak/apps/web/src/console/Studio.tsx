@@ -2,12 +2,13 @@
 // is an explicit button; merely switching modes never does.
 
 import { motion } from 'framer-motion';
-import { BookOpen, CircleAlert, History, Loader2, MessageSquarePlus, PanelLeftClose, Play, RotateCw, SquareX, Theater } from 'lucide-react';
+import { BookOpen, CircleAlert, History, Loader2, MessageSquarePlus, PanelLeftClose, RotateCw, SquareX, Theater } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
-import { RECREATION_NOTICE } from '../data/caseStudies';
+import { caseStudyFor, RECONSTRUCTION_LABEL } from '../data/caseStudies';
 import { LEVEL_META } from '../data/meta';
 import type { ScenarioView } from '../lib/api';
 import { MODE_META, ORIGIN_META } from '../lib/flow';
+import { PlayReconstruction } from './CaseStudyView';
 import { cancelHistoryInit, childNameOf, continueLiveFromHere, initHistory, loadHistory, PREVIEW_ID, scriptLength, selectScenario, startFreshConversation, useDemo } from '../store';
 
 export function Studio({ onClose, onOpenCaseStudy }: { onClose: () => void; onOpenCaseStudy: (key: string) => void }) {
@@ -46,7 +47,7 @@ function CaseStatus() {
       <div className="case-status-k">Current case · {meta.label}</div>
       <div className="case-status-v">
         {d.origin === 'preview' ? 'Six days, one stranger' : d.origin === 'fresh' ? 'New conversation' : sc?.title ?? d.scenarioId}
-        {sc?.kind === 'case_study' && <span className="studio-tag">fictional recreation</span>}
+        {sc?.kind === 'case_study' && <span className="studio-tag">fictional reconstruction</span>}
       </div>
       <div className="case-status-s">
         Protected child: {childNameOf(d)}
@@ -69,7 +70,7 @@ function ScenarioRow({ s, on, onClick, sub }: { s: ScenarioView; on: boolean; on
   );
 }
 
-function CaseStudyCards({ onOpenCaseStudy, onPick, pickLabel }: { onOpenCaseStudy: (key: string) => void; onPick: (s: ScenarioView) => void; pickLabel: string }) {
+function CaseStudyCards({ onOpenCaseStudy }: { onOpenCaseStudy: (key: string) => void }) {
   const all = useDemo((s) => s.data.scenarios);
   const scenarios = useMemo(() => all.filter((x) => x.kind === 'case_study'), [all]);
   if (!scenarios.length) return <div className="pop-note">Case studies appear when the inference service is running.</div>;
@@ -80,14 +81,12 @@ function CaseStudyCards({ onOpenCaseStudy, onPick, pickLabel }: { onOpenCaseStud
           <div className="cs-card-t">
             <Theater size={13} /> {s.title}
           </div>
-          <div className="cs-card-s">{s.tests}</div>
-          <div className="cs-card-n">{RECREATION_NOTICE}</div>
+          <div className="cs-card-s">{caseStudyFor(s.caseStudy)?.context.text ?? s.tests}</div>
+          <div className="cs-card-n">{RECONSTRUCTION_LABEL}</div>
           <div className="pop-inline">
+            <PlayReconstruction scenarioId={s.id} small />
             <button className="chip-btn" onClick={() => onOpenCaseStudy(s.caseStudy ?? '')}>
               <BookOpen size={12} /> Case study
-            </button>
-            <button className="chip-btn" onClick={() => onPick(s)}>
-              <Play size={12} /> {pickLabel}
             </button>
           </div>
         </div>
@@ -135,8 +134,8 @@ function GuidedPanel({ onOpenCaseStudy }: { onOpenCaseStudy: (key: string) => vo
         {online === false && core.length === 0 && <div className="pop-note">Inference service offline. Start apps/server to run the live examples.</div>}
       </div>
 
-      <div className="studio-k">Case studies · fictional recreations</div>
-      <CaseStudyCards onOpenCaseStudy={onOpenCaseStudy} onPick={(s) => selectScenario(s.id)} pickLabel="Load playback" />
+      <div className="studio-k">Case studies · fictional reconstructions</div>
+      <CaseStudyCards onOpenCaseStudy={onOpenCaseStudy} />
 
       <div className="studio-k">Predefined preview · not live AI</div>
       <button className={`scn-item scn-preview ${d.scenarioId === PREVIEW_ID ? 'on' : ''}`} onClick={() => selectScenario(PREVIEW_ID)}>
@@ -202,12 +201,12 @@ function ContinuePanel({ onOpenCaseStudy }: { onOpenCaseStudy: (key: string) => 
       <div className="studio-k">1 · Choose an earlier conversation</div>
       <div className="scn-list">
         {all.map((s) => (
-          <ScenarioRow key={s.id} s={s} on={s.id === pick} onClick={() => setPick(s.id)} sub={s.kind === 'case_study' ? 'Fictional case-study recreation' : s.subtitle} />
+          <ScenarioRow key={s.id} s={s} on={s.id === pick} onClick={() => setPick(s.id)} sub={s.kind === 'case_study' ? RECONSTRUCTION_LABEL : s.subtitle} />
         ))}
       </div>
       {sc?.kind === 'case_study' && (
         <div className="cs-card">
-          <div className="cs-card-n">{RECREATION_NOTICE}</div>
+          <div className="cs-card-n">{RECONSTRUCTION_LABEL} · live messages after the checkpoint are a hypothetical continuation</div>
           <button className="chip-btn" onClick={() => onOpenCaseStudy(sc.caseStudy ?? '')}>
             <BookOpen size={12} /> Open case study
           </button>

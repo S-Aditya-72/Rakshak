@@ -146,6 +146,10 @@ export const DISCLAIMERS = [
   'Automated redaction may be incomplete. Review every excerpt before sharing this file.',
 ];
 
+/** Replaces the first disclaimer when the case is a case-study reconstruction of a real, documented incident. */
+export const RECONSTRUCTION_DISCLAIMER =
+  'RECONSTRUCTED DIALOGUE, NOT AUTHENTIC EVIDENCE. These messages were written for a demonstration as a fictional reconstruction of a documented case. They are not an actual transcript; real names appear only to identify the case being reconstructed.';
+
 export interface ExportOptions {
   reportId: string;
   createdAt: string;
@@ -164,6 +168,8 @@ export interface ExportOptions {
   backendLabel: string;
   models: string[];
   caseKey: string;
+  /** The case is a case-study reconstruction: labelled as such instead of as a simulated, non-real incident. */
+  reconstruction?: boolean;
 }
 
 export function newReportId(now = new Date()) {
@@ -205,7 +211,7 @@ export function buildExport(o: ExportOptions): ExportDoc {
     reportId: o.reportId,
     createdAt: o.createdAt,
     status: 'Not submitted',
-    designation: 'Synthetic demo · RAKSHAK prototype',
+    designation: o.reconstruction ? 'Fictional reconstruction of a documented case · RAKSHAK prototype' : 'Synthetic demo · RAKSHAK prototype',
     protectedPerson: o.redact ? o.alias : o.childName,
     redacted: o.redact,
     summary: clean(o.summary),
@@ -219,7 +225,7 @@ export function buildExport(o: ExportOptions): ExportDoc {
     reportedAccounts: [...accounts.entries()].map(([accountId, a]) => ({ accountId, displayed: a.displayed, suspectedBehaviour: [...a.behaviours] })),
     provenance: { backend: o.backendLabel, models: o.models, caseRef: o.redact ? o.caseKey.replace(o.childId, o.alias) : o.caseKey },
     notes: clean(o.notes),
-    disclaimers: DISCLAIMERS,
+    disclaimers: o.reconstruction ? [RECONSTRUCTION_DISCLAIMER, ...DISCLAIMERS.slice(1)] : DISCLAIMERS,
   };
 }
 

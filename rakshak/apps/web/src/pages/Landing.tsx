@@ -322,7 +322,7 @@ export function LandingPage() {
                 <Bot size={24} />
               </div>
               <div className="launch-t">A · Guided Demo</div>
-              <p>Five scripted conversations and two fictional case-study recreations run through the real models. Alerts follow the live analysis.</p>
+              <p>Five scripted conversations and two case-study reconstructions run through the real models. Alerts follow the live analysis.</p>
               <span className="launch-go">
                 Start <ArrowRight size={15} />
               </span>
