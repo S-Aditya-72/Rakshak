@@ -161,9 +161,19 @@ After a few seconds it prints `RAKSHAK over the internet · Address: https://…
 Open `http://127.0.0.1:5280/#/engine` → **Connect phones**: the first tab, **Over the internet**, is a QR code for that
 address.
 
-**On each phone, wherever it is:** RAKSHAK → **Scan QR code** → point it at the laptop's screen shared in a video call
-(Meet, Discord, WhatsApp video), or at a photo of it → choose the role. No camera? *Enter address and code by hand*
-with the `….trycloudflare.com` address and the code.
+**On each phone, wherever it is:** scan the QR off the laptop's screen shared in a video call (Meet, Discord, WhatsApp
+video), or off a photo of it, then choose the role:
+
+- **No app needed:** scan with the phone's normal camera (or Google Lens) and open the link. The same phone app opens in
+  the browser, already connected.
+- **With the RAKSHAK app:** RAKSHAK → **Scan QR code**. No camera? *Enter address and code by hand* with the
+  `….trycloudflare.com` address and the code.
+
+In the browser everything works the same (chats, nudges, photo pause, guardian alerts, Get help, temporary guardians),
+except what needs the app on Android: notifications arrive only while the RAKSHAK tab is open (allow them when asked;
+keep the guardian's tab on screen, the page keeps the screen awake), there is no background service, and the status
+bars are the browser's. iPhones work too, without vibration. Over Wi-Fi (`http://…`) browsers also block the camera
+and notifications; use the *Over the internet* QR for browser phones.
 
 **From your own laptop's browser** you can take a role too: run `npm run dev` on your laptop, open
 `http://127.0.0.1:5280/#/app` → *Enter address and code by hand* → the tunnel address and code → pick a role. The

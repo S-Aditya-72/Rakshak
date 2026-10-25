@@ -111,7 +111,8 @@ npm run server:lan
 
 **Phones somewhere else** (teammates in another city): install `cloudflared` once
 (`winget install Cloudflare.cloudflared`) and start the server with `npm run server:remote` instead. Connect phones
-then shows an *Over the internet* QR code that works from anywhere; scan it off a shared screen. Details:
+then shows an *Over the internet* QR code that works from anywhere; scan it off a shared screen. **No APK needed:** a
+phone camera opens the same phone app in the browser (notifications only while the tab is open). Details:
 [MOBILE.md → Phones in another city](MOBILE.md#phones-in-another-city-over-the-internet).
 
 **6. After pulling new code later:** run `npm install` again, restart both terminals, and reinstall the APK on the
